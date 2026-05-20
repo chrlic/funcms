@@ -10,10 +10,8 @@ node_modules/
 .env
 .env.local
 
-# Content repo — separate git, never part of the app repo
-content/
-
 # Git worktrees — session branches, ephemeral
+# (content repo lives at ../funcms-content, outside this tree)
 .worktrees/
 
 # OS
@@ -26,4 +24,3 @@ Thumbs.db
 
 # Logs
 *.log
-src/
