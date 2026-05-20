@@ -1,0 +1,28 @@
+# Nuxt build artifacts
+.nuxt/
+.output/
+dist/
+
+# Node
+node_modules/
+
+# Env — keep .env.example, never commit secrets
+.env
+.env.local
+
+# Content repo — separate git, never part of the app repo
+content/
+
+# Git worktrees — session branches, ephemeral
+.worktrees/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/settings.json
+.idea/
+
+# Logs
+*.log

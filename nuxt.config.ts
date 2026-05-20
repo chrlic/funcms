@@ -1,0 +1,54 @@
+// https://nuxt.com/docs/api/configuration/nuxt-config
+export default defineNuxtConfig({
+  devtools: { enabled: true },
+
+  modules: [
+    '@pinia/nuxt',
+    '@nuxtjs/tailwindcss',
+    '@vueuse/nuxt',
+    'nuxt-icon',
+    '@nuxtjs/color-mode',
+  ],
+
+  components: [
+    { path: '~/components', pathPrefix: false },
+  ],
+
+  colorMode: {
+    classSuffix: '',
+  },
+
+  runtimeConfig: {
+    // Server-only secrets
+    jwtSecret: process.env.JWT_SECRET || 'change-me-in-production',
+    jwtExpiresIn: process.env.JWT_EXPIRES_IN || '7d',
+    // Git store config
+    contentDir: process.env.CONTENT_DIR || './content',
+    gitAuthorName: process.env.GIT_AUTHOR_NAME || 'FunCMS',
+    gitAuthorEmail: process.env.GIT_AUTHOR_EMAIL || 'cms@localhost',
+    gitRemote: process.env.GIT_REMOTE || '',
+    // Public (exposed to client)
+    public: {
+      appName: process.env.APP_NAME || 'FunCMS',
+      apiBase: process.env.API_BASE || '/api',
+    },
+  },
+
+  nitro: {
+    plugins: ['~/server/plugins/git-store.ts'],
+  },
+
+  typescript: {
+    strict: true,
+    typeCheck: false,
+  },
+
+  routeRules: {
+    '/admin/**': { ssr: true, headers: { 'X-Robots-Tag': 'noindex' } },
+    '/api/**': { cors: true },
+  },
+
+  imports: {
+    dirs: ['stores', 'composables', 'types'],
+  },
+})
