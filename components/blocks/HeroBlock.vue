@@ -44,9 +44,8 @@ const heightMap = {
       <h1 class="text-4xl md:text-6xl font-bold mb-4 leading-tight">
         {{ heading }}
       </h1>
-      <p v-if="subheading" class="text-lg md:text-xl mb-8 opacity-90">
-        {{ subheading }}
-      </p>
+      <!-- eslint-disable-next-line vue/no-v-html -->
+      <div v-if="subheading" class="text-lg md:text-xl mb-8 opacity-90 prose prose-invert max-w-none" v-html="subheading" />
       <a
         v-if="ctaLabel && ctaHref"
         :href="ctaHref"

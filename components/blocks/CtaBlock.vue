@@ -17,7 +17,8 @@ withDefaults(defineProps<{
     :class="background ? '' : 'bg-indigo-600 text-white'"
   >
     <h2 v-if="heading" class="text-3xl font-bold mb-3">{{ heading }}</h2>
-    <p v-if="body" class="text-lg opacity-90 mb-6 max-w-xl mx-auto">{{ body }}</p>
+    <!-- eslint-disable-next-line vue/no-v-html -->
+    <div v-if="body" class="text-lg opacity-90 mb-6 max-w-xl mx-auto prose prose-invert max-w-none" v-html="body" />
     <div class="flex flex-wrap gap-4 justify-center">
       <a
         v-if="primaryLabel && primaryHref"

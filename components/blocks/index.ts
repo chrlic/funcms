@@ -1,17 +1,29 @@
-import { defineAsyncComponent, type Component } from 'vue'
+import type { Component } from 'vue'
 import type { BlockType } from '~/types'
+import HeroBlock from './HeroBlock.vue'
+import RichTextBlock from './RichTextBlock.vue'
+import MediaTextBlock from './MediaTextBlock.vue'
+import GridBlock from './GridBlock.vue'
+import ImageBlock from './ImageBlock.vue'
+import GalleryBlock from './GalleryBlock.vue'
+import VideoBlock from './VideoBlock.vue'
+import CtaBlock from './CtaBlock.vue'
+import CardRowBlock from './CardRowBlock.vue'
+import DividerBlock from './DividerBlock.vue'
+import RawHtmlBlock from './RawHtmlBlock.vue'
 
 const blockRegistry: Record<BlockType, Component> = {
-  'hero': defineAsyncComponent(() => import('./HeroBlock.vue')),
-  'rich-text': defineAsyncComponent(() => import('./RichTextBlock.vue')),
-  'grid': defineAsyncComponent(() => import('./GridBlock.vue')),
-  'image': defineAsyncComponent(() => import('./ImageBlock.vue')),
-  'gallery': defineAsyncComponent(() => import('./GalleryBlock.vue')),
-  'video': defineAsyncComponent(() => import('./VideoBlock.vue')),
-  'cta': defineAsyncComponent(() => import('./CtaBlock.vue')),
-  'card-row': defineAsyncComponent(() => import('./CardRowBlock.vue')),
-  'divider': defineAsyncComponent(() => import('./DividerBlock.vue')),
-  'raw-html': defineAsyncComponent(() => import('./RawHtmlBlock.vue')),
+  'hero': HeroBlock,
+  'rich-text': RichTextBlock,
+  'media-text': MediaTextBlock,
+  'grid': GridBlock,
+  'image': ImageBlock,
+  'gallery': GalleryBlock,
+  'video': VideoBlock,
+  'cta': CtaBlock,
+  'card-row': CardRowBlock,
+  'divider': DividerBlock,
+  'raw-html': RawHtmlBlock,
 }
 
 export default blockRegistry
@@ -31,7 +43,7 @@ export interface PropSchema {
 export const blockSchemas: Record<BlockType, Record<string, PropSchema>> = {
   'hero': {
     heading: { type: 'text', label: 'Heading', required: true },
-    subheading: { type: 'textarea', label: 'Subheading' },
+    subheading: { type: 'richtext', label: 'Subheading' },
     image: { type: 'image', label: 'Background Image' },
     ctaLabel: { type: 'text', label: 'Button Label' },
     ctaHref: { type: 'url', label: 'Button URL' },
@@ -50,6 +62,26 @@ export const blockSchemas: Record<BlockType, Record<string, PropSchema>> = {
       { label: 'Wide (90ch)', value: 'wide' },
       { label: 'Full', value: 'full' },
     ]},
+  },
+  'media-text': {
+    image: { type: 'image', label: 'Image', required: true },
+    imageAlt: { type: 'text', label: 'Image Alt Text' },
+    imagePosition: { type: 'select', label: 'Image Side', default: 'left', options: [
+      { label: 'Left', value: 'left' },
+      { label: 'Right', value: 'right' },
+    ]},
+    imageWidth: { type: 'select', label: 'Image Width', default: 'half', options: [
+      { label: '1/3', value: 'third' },
+      { label: '1/2', value: 'half' },
+      { label: '2/3', value: 'two-thirds' },
+    ]},
+    verticalAlign: { type: 'select', label: 'Vertical Align', default: 'center', options: [
+      { label: 'Top', value: 'top' },
+      { label: 'Center', value: 'center' },
+      { label: 'Bottom', value: 'bottom' },
+    ]},
+    caption: { type: 'text', label: 'Image Caption' },
+    content: { type: 'richtext', label: 'Text Content', required: true },
   },
   'grid': {
     columns: { type: 'select', label: 'Columns', default: '3', options: [
@@ -90,7 +122,7 @@ export const blockSchemas: Record<BlockType, Record<string, PropSchema>> = {
   },
   'cta': {
     heading: { type: 'text', label: 'Heading' },
-    body: { type: 'textarea', label: 'Body Text' },
+    body: { type: 'richtext', label: 'Body Text' },
     primaryLabel: { type: 'text', label: 'Primary Button Label' },
     primaryHref: { type: 'url', label: 'Primary Button URL' },
     secondaryLabel: { type: 'text', label: 'Secondary Button Label' },

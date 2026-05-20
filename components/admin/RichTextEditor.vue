@@ -11,7 +11,6 @@ const emit = defineEmits<{ 'update:modelValue': [value: string] }>()
 
 const { pages, load: loadPages } = usePagePicker()
 
-// ─── Link dialog state ────────────────────────────────────────────────────────
 const showLinkDialog = ref(false)
 const linkHref = ref('')
 const linkNewTab = ref(false)
@@ -44,7 +43,6 @@ function removeLink() {
   showLinkDialog.value = false
 }
 
-// ─── Editor setup ─────────────────────────────────────────────────────────────
 const editor = useEditor({
   content: props.modelValue,
   extensions: [
@@ -59,7 +57,6 @@ const editor = useEditor({
   },
 })
 
-// Keep editor in sync when value changes externally (e.g. block swap)
 watch(() => props.modelValue, (val) => {
   if (editor.value && editor.value.getHTML() !== val) {
     editor.value.commands.setContent(val, false)
@@ -68,31 +65,50 @@ watch(() => props.modelValue, (val) => {
 
 onBeforeUnmount(() => editor.value?.destroy())
 
-// ─── Toolbar helpers ──────────────────────────────────────────────────────────
-type TipBtn = { icon: string; title: string; action: () => void; active?: () => boolean }
+// Inline SVG icons for toolbar buttons
+const svg = {
+  bold: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="w-4 h-4"><path fill-rule="evenodd" d="M6 4.75A.75.75 0 0 1 6.75 4h6a4.25 4.25 0 0 1 2.596 7.616A4.25 4.25 0 0 1 12.75 20H6.75a.75.75 0 0 1-.75-.75V4.75Zm1.5.75v5.5h5.25a2.75 2.75 0 0 0 0-5.5H7.5Zm0 7v6h6.25a2.75 2.75 0 0 0 0-5.5H7.5Z" clip-rule="evenodd"/></svg>',
+  italic: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="w-4 h-4"><path fill-rule="evenodd" d="M10.5 4.75a.75.75 0 0 0-.75.75v.765l-2.373 9.02H5.75a.75.75 0 0 0 0 1.5h4a.75.75 0 0 0 0-1.5h-1.624l2.373-9.02H12.5v.265a.75.75 0 0 0 1.5 0V5.5a.75.75 0 0 0-.75-.75h-2.75Z" clip-rule="evenodd"/></svg>',
+  underline: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="w-4 h-4"><path fill-rule="evenodd" d="M5.75 4a.75.75 0 0 1 .75.75v6.5a5.5 5.5 0 0 0 11 0v-6.5a.75.75 0 0 1 1.5 0v6.5a7 7 0 0 1-14 0v-6.5A.75.75 0 0 1 5.75 4ZM4 19.25a.75.75 0 0 1 .75-.75h14.5a.75.75 0 0 1 0 1.5H4.75a.75.75 0 0 1-.75-.75Z" clip-rule="evenodd"/></svg>',
+  strike: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="w-4 h-4"><path fill-rule="evenodd" d="M3.25 12a.75.75 0 0 1 .75-.75h16a.75.75 0 0 1 0 1.5H4a.75.75 0 0 1-.75-.75ZM8 6.5a3.5 3.5 0 0 1 6.965-.476.75.75 0 0 1-1.493.148A2 2 0 0 0 9.5 6.5v.25H8V6.5Zm0 10.75V17h1.5v.25a2 2 0 0 0 3.972-.352.75.75 0 0 1 1.493.148A3.5 3.5 0 0 1 8 17.25v-.25H8Z" clip-rule="evenodd"/></svg>',
+  h1: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="w-4 h-4"><path fill-rule="evenodd" d="M3.75 5a.75.75 0 0 1 .75.75v5h7.5v-5a.75.75 0 0 1 1.5 0v11.5a.75.75 0 0 1-1.5 0v-5h-7.5v5a.75.75 0 0 1-1.5 0V5.75A.75.75 0 0 1 3.75 5Zm13 0a.75.75 0 0 1 .69.46l.008.019V5.5a.75.75 0 0 1-.698.997L15.75 6.5v-1H15l1.5-1h.25Z" clip-rule="evenodd"/></svg>',
+  h2: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="w-4 h-4"><path d="M3.75 5a.75.75 0 0 1 .75.75v5h7.5v-5a.75.75 0 0 1 1.5 0v11.5a.75.75 0 0 1-1.5 0v-5h-7.5v5a.75.75 0 0 1-1.5 0V5.75A.75.75 0 0 1 3.75 5Zm12.5 0a2.5 2.5 0 0 1 1.912 4.144l-2.158 2.606H20a.75.75 0 0 1 0 1.5h-3.75a.75.75 0 0 1-.576-1.232l2.89-3.493A1 1 0 0 0 16.25 7a1 1 0 0 0-1 1 .75.75 0 0 1-1.5 0 2.5 2.5 0 0 1 2.5-2.5Z"/></svg>',
+  h3: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="w-4 h-4"><path d="M3.75 5a.75.75 0 0 1 .75.75v5h7.5v-5a.75.75 0 0 1 1.5 0v11.5a.75.75 0 0 1-1.5 0v-5h-7.5v5a.75.75 0 0 1-1.5 0V5.75A.75.75 0 0 1 3.75 5Zm12.5 0a2.5 2.5 0 0 1 1.641 4.395A2.5 2.5 0 0 1 16.25 14h-.5a2.5 2.5 0 0 1-2.5-2.5.75.75 0 0 1 1.5 0 1 1 0 0 0 1 1h.5a1 1 0 1 0 0-2 .75.75 0 0 1 0-1.5 1 1 0 1 0 0-2h-.5a1 1 0 0 0-1 1 .75.75 0 0 1-1.5 0 2.5 2.5 0 0 1 2.5-2.5h.5Z"/></svg>',
+  ul: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="w-4 h-4"><path fill-rule="evenodd" d="M2.625 6.75a1.125 1.125 0 1 1 2.25 0 1.125 1.125 0 0 1-2.25 0Zm4.875 0A.75.75 0 0 1 8.25 6h12a.75.75 0 0 1 0 1.5h-12A.75.75 0 0 1 7.5 6.75Zm-4.875 5.25a1.125 1.125 0 1 1 2.25 0 1.125 1.125 0 0 1-2.25 0Zm4.875 0a.75.75 0 0 1 .75-.75h12a.75.75 0 0 1 0 1.5h-12a.75.75 0 0 1-.75-.75Zm-4.875 5.25a1.125 1.125 0 1 1 2.25 0 1.125 1.125 0 0 1-2.25 0Zm4.875 0a.75.75 0 0 1 .75-.75h12a.75.75 0 0 1 0 1.5h-12a.75.75 0 0 1-.75-.75Z" clip-rule="evenodd"/></svg>',
+  ol: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="w-4 h-4"><path fill-rule="evenodd" d="M3 6.75A.75.75 0 0 1 3.75 6h.75V4.811a.75.75 0 0 1 .774-.75l.984.055A.75.75 0 0 1 6 4.86v1.89h.75a.75.75 0 0 1 0 1.5h-3A.75.75 0 0 1 3 7.5v-.75ZM3 12a.75.75 0 0 1 .75-.75H4.5v-.75a.75.75 0 0 1 1.5 0v.75h.75a.75.75 0 0 1 0 1.5H6a.75.75 0 0 0 0 .75.75.75 0 0 1-1.5 0A.75.75 0 0 0 3.75 13H3a.75.75 0 0 1 0-1.5v.5Zm5.25-6a.75.75 0 0 1 .75-.75h9a.75.75 0 0 1 0 1.5H9A.75.75 0 0 1 8.25 6Zm0 6a.75.75 0 0 1 .75-.75h9a.75.75 0 0 1 0 1.5H9A.75.75 0 0 1 8.25 12Zm0 6a.75.75 0 0 1 .75-.75h9a.75.75 0 0 1 0 1.5H9a.75.75 0 0 1-.75-.75ZM3 18.75a.75.75 0 0 1 .75-.75h3a.75.75 0 0 1 0 1.5H3.75a.75.75 0 0 1-.75-.75Z" clip-rule="evenodd"/></svg>',
+  blockquote: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="w-4 h-4"><path fill-rule="evenodd" d="M4.804 21.644A6.707 6.707 0 0 0 6 21.75a6.721 6.721 0 0 0 3.583-1.029c.774.182 1.584.279 2.417.279 5.322 0 9.75-3.97 9.75-9 0-5.03-4.428-9-9.75-9s-9.75 3.97-9.75 9c0 2.409 1.025 4.587 2.674 6.192.232.226.277.428.254.543a3.73 3.73 0 0 1-.814 1.686.75.75 0 0 0 .44 1.223ZM8.25 10.875a1.125 1.125 0 1 0 0 2.25 1.125 1.125 0 0 0 0-2.25ZM10.875 12a1.125 1.125 0 1 1 2.25 0 1.125 1.125 0 0 1-2.25 0Zm4.875-1.125a1.125 1.125 0 1 0 0 2.25 1.125 1.125 0 0 0 0-2.25Z" clip-rule="evenodd"/></svg>',
+  hr: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="w-4 h-4"><path fill-rule="evenodd" d="M3 12a.75.75 0 0 1 .75-.75h16.5a.75.75 0 0 1 0 1.5H3.75A.75.75 0 0 1 3 12Z" clip-rule="evenodd"/></svg>',
+  alignLeft: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="w-4 h-4"><path fill-rule="evenodd" d="M3 6.75A.75.75 0 0 1 3.75 6h16.5a.75.75 0 0 1 0 1.5H3.75A.75.75 0 0 1 3 6.75ZM3 12a.75.75 0 0 1 .75-.75H12a.75.75 0 0 1 0 1.5H3.75A.75.75 0 0 1 3 12Zm0 5.25a.75.75 0 0 1 .75-.75h16.5a.75.75 0 0 1 0 1.5H3.75a.75.75 0 0 1-.75-.75Z" clip-rule="evenodd"/></svg>',
+  alignCenter: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="w-4 h-4"><path fill-rule="evenodd" d="M3 6.75A.75.75 0 0 1 3.75 6h16.5a.75.75 0 0 1 0 1.5H3.75A.75.75 0 0 1 3 6.75ZM6 12a.75.75 0 0 1 .75-.75h10.5a.75.75 0 0 1 0 1.5H6.75A.75.75 0 0 1 6 12Zm-3 5.25a.75.75 0 0 1 .75-.75h16.5a.75.75 0 0 1 0 1.5H3.75a.75.75 0 0 1-.75-.75Z" clip-rule="evenodd"/></svg>',
+  alignRight: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="w-4 h-4"><path fill-rule="evenodd" d="M3 6.75A.75.75 0 0 1 3.75 6h16.5a.75.75 0 0 1 0 1.5H3.75A.75.75 0 0 1 3 6.75ZM12 12a.75.75 0 0 1 .75-.75h7.5a.75.75 0 0 1 0 1.5h-7.5A.75.75 0 0 1 12 12Zm-8.25 5.25a.75.75 0 0 1 .75-.75h16.5a.75.75 0 0 1 0 1.5H3.75a.75.75 0 0 1-.75-.75Z" clip-rule="evenodd"/></svg>',
+  link: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="w-4 h-4"><path fill-rule="evenodd" d="M19.902 4.098a3.75 3.75 0 0 0-5.304 0l-4.5 4.5a3.75 3.75 0 0 0 1.035 6.037.75.75 0 0 1-.646 1.353 5.25 5.25 0 0 1-1.449-8.45l4.5-4.5a5.25 5.25 0 1 1 7.424 7.424l-1.757 1.757a.75.75 0 1 1-1.06-1.06l1.757-1.757a3.75 3.75 0 0 0 0-5.304Zm-7.389 4.267a.75.75 0 0 1 1-.353 5.25 5.25 0 0 1 1.449 8.45l-4.5 4.5a5.25 5.25 0 1 1-7.424-7.424l1.757-1.757a.75.75 0 1 1 1.06 1.06l-1.757 1.757a3.75 3.75 0 1 0 5.304 5.304l4.5-4.5a3.75 3.75 0 0 0-1.035-6.037.75.75 0 0 1-.354-1Z" clip-rule="evenodd"/></svg>',
+  clear: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="w-4 h-4"><path fill-rule="evenodd" d="M12 2.25c-5.385 0-9.75 4.365-9.75 9.75s4.365 9.75 9.75 9.75 9.75-4.365 9.75-9.75S17.385 2.25 12 2.25Zm-1.72 6.97a.75.75 0 1 0-1.06 1.06L10.94 12l-1.72 1.72a.75.75 0 1 0 1.06 1.06L12 13.06l1.72 1.72a.75.75 0 1 0 1.06-1.06L13.06 12l1.72-1.72a.75.75 0 1 0-1.06-1.06L12 10.94l-1.72-1.72Z" clip-rule="evenodd"/></svg>',
+}
+
+type TipBtn = { icon: keyof typeof svg; title: string; action: () => void; active?: () => boolean }
 
 const toolbarGroups: TipBtn[][] = [
   [
-    { icon: 'i-heroicons-bold', title: 'Bold', action: () => editor.value?.chain().focus().toggleBold().run(), active: () => !!editor.value?.isActive('bold') },
-    { icon: 'i-heroicons-italic', title: 'Italic', action: () => editor.value?.chain().focus().toggleItalic().run(), active: () => !!editor.value?.isActive('italic') },
-    { icon: 'i-heroicons-underline', title: 'Underline', action: () => editor.value?.chain().focus().toggleUnderline().run(), active: () => !!editor.value?.isActive('underline') },
-    { icon: 'i-heroicons-strikethrough', title: 'Strikethrough', action: () => editor.value?.chain().focus().toggleStrike().run(), active: () => !!editor.value?.isActive('strike') },
+    { icon: 'bold',    title: 'Bold',          action: () => editor.value?.chain().focus().toggleBold().run(),        active: () => !!editor.value?.isActive('bold') },
+    { icon: 'italic',  title: 'Italic',        action: () => editor.value?.chain().focus().toggleItalic().run(),      active: () => !!editor.value?.isActive('italic') },
+    { icon: 'underline', title: 'Underline',   action: () => editor.value?.chain().focus().toggleUnderline().run(),   active: () => !!editor.value?.isActive('underline') },
+    { icon: 'strike',  title: 'Strikethrough', action: () => editor.value?.chain().focus().toggleStrike().run(),      active: () => !!editor.value?.isActive('strike') },
   ],
   [
-    { icon: 'i-heroicons-h1', title: 'Heading 1', action: () => editor.value?.chain().focus().toggleHeading({ level: 1 }).run(), active: () => !!editor.value?.isActive('heading', { level: 1 }) },
-    { icon: 'i-heroicons-h2', title: 'Heading 2', action: () => editor.value?.chain().focus().toggleHeading({ level: 2 }).run(), active: () => !!editor.value?.isActive('heading', { level: 2 }) },
-    { icon: 'i-heroicons-h3', title: 'Heading 3', action: () => editor.value?.chain().focus().toggleHeading({ level: 3 }).run(), active: () => !!editor.value?.isActive('heading', { level: 3 }) },
+    { icon: 'h1', title: 'Heading 1', action: () => editor.value?.chain().focus().toggleHeading({ level: 1 }).run(), active: () => !!editor.value?.isActive('heading', { level: 1 }) },
+    { icon: 'h2', title: 'Heading 2', action: () => editor.value?.chain().focus().toggleHeading({ level: 2 }).run(), active: () => !!editor.value?.isActive('heading', { level: 2 }) },
+    { icon: 'h3', title: 'Heading 3', action: () => editor.value?.chain().focus().toggleHeading({ level: 3 }).run(), active: () => !!editor.value?.isActive('heading', { level: 3 }) },
   ],
   [
-    { icon: 'i-heroicons-list-bullet', title: 'Bullet list', action: () => editor.value?.chain().focus().toggleBulletList().run(), active: () => !!editor.value?.isActive('bulletList') },
-    { icon: 'i-heroicons-numbered-list', title: 'Ordered list', action: () => editor.value?.chain().focus().toggleOrderedList().run(), active: () => !!editor.value?.isActive('orderedList') },
-    { icon: 'i-heroicons-chat-bubble-bottom-center-text', title: 'Blockquote', action: () => editor.value?.chain().focus().toggleBlockquote().run(), active: () => !!editor.value?.isActive('blockquote') },
-    { icon: 'i-heroicons-minus', title: 'Divider', action: () => editor.value?.chain().focus().setHorizontalRule().run() },
+    { icon: 'ul',         title: 'Bullet list',  action: () => editor.value?.chain().focus().toggleBulletList().run(),  active: () => !!editor.value?.isActive('bulletList') },
+    { icon: 'ol',         title: 'Ordered list', action: () => editor.value?.chain().focus().toggleOrderedList().run(), active: () => !!editor.value?.isActive('orderedList') },
+    { icon: 'blockquote', title: 'Blockquote',   action: () => editor.value?.chain().focus().toggleBlockquote().run(),  active: () => !!editor.value?.isActive('blockquote') },
+    { icon: 'hr',         title: 'Divider',      action: () => editor.value?.chain().focus().setHorizontalRule().run() },
   ],
   [
-    { icon: 'i-heroicons-bars-3-bottom-left', title: 'Align left', action: () => editor.value?.chain().focus().setTextAlign('left').run(), active: () => !!editor.value?.isActive({ textAlign: 'left' }) },
-    { icon: 'i-heroicons-bars-3', title: 'Align center', action: () => editor.value?.chain().focus().setTextAlign('center').run(), active: () => !!editor.value?.isActive({ textAlign: 'center' }) },
-    { icon: 'i-heroicons-bars-3-bottom-right', title: 'Align right', action: () => editor.value?.chain().focus().setTextAlign('right').run(), active: () => !!editor.value?.isActive({ textAlign: 'right' }) },
+    { icon: 'alignLeft',   title: 'Align left',   action: () => editor.value?.chain().focus().setTextAlign('left').run(),   active: () => !!editor.value?.isActive({ textAlign: 'left' }) },
+    { icon: 'alignCenter', title: 'Align center', action: () => editor.value?.chain().focus().setTextAlign('center').run(), active: () => !!editor.value?.isActive({ textAlign: 'center' }) },
+    { icon: 'alignRight',  title: 'Align right',  action: () => editor.value?.chain().focus().setTextAlign('right').run(),  active: () => !!editor.value?.isActive({ textAlign: 'right' }) },
   ],
 ]
 </script>
@@ -112,27 +128,21 @@ const toolbarGroups: TipBtn[][] = [
             btn.active?.() ? 'bg-indigo-600 text-white' : 'text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600',
           ]"
           @mousedown.prevent="btn.action()"
-        >
-          <Icon :name="btn.icon" class="w-4 h-4" />
-        </button>
+          v-html="svg[btn.icon]"
+        />
         <div v-if="gi < toolbarGroups.length - 1" class="w-px bg-gray-200 dark:bg-gray-600 mx-0.5 self-stretch" />
       </template>
 
-      <!-- Separator before link -->
       <div class="w-px bg-gray-200 dark:bg-gray-600 mx-0.5 self-stretch" />
 
-      <!-- Link button -->
+      <!-- Link -->
       <button
         title="Link"
         type="button"
-        :class="[
-          'p-1.5 rounded text-sm transition',
-          editor?.isActive('link') ? 'bg-indigo-600 text-white' : 'text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600',
-        ]"
+        :class="['p-1.5 rounded text-sm transition', editor?.isActive('link') ? 'bg-indigo-600 text-white' : 'text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600']"
         @mousedown.prevent="openLinkDialog"
-      >
-        <Icon name="i-heroicons-link" class="w-4 h-4" />
-      </button>
+        v-html="svg.link"
+      />
 
       <div class="flex-1" />
 
@@ -142,12 +152,10 @@ const toolbarGroups: TipBtn[][] = [
         type="button"
         class="p-1.5 rounded text-sm text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600 transition"
         @mousedown.prevent="editor?.chain().focus().clearNodes().unsetAllMarks().run()"
-      >
-        <Icon name="i-heroicons-x-circle" class="w-4 h-4" />
-      </button>
+        v-html="svg.clear"
+      />
     </div>
 
-    <!-- Editor area -->
     <EditorContent
       :editor="editor"
       class="prose prose-sm dark:prose-invert max-w-none px-4 py-3 min-h-[8rem] focus:outline-none dark:bg-gray-800 dark:text-white [&_.tiptap]:outline-none [&_.tiptap.is-empty_p.is-empty::before]:text-gray-400 [&_.tiptap.is-empty_p.is-empty::before]:content-[attr(data-placeholder)] [&_.tiptap.is-empty_p.is-empty::before]:pointer-events-none [&_.tiptap.is-empty_p.is-empty::before]:float-left [&_.tiptap.is-empty_p.is-empty::before]:h-0"
@@ -158,20 +166,10 @@ const toolbarGroups: TipBtn[][] = [
       <div v-if="showLinkDialog" class="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4" @click.self="showLinkDialog = false">
         <div class="bg-white dark:bg-gray-800 rounded-2xl shadow-xl w-full max-w-md p-6 space-y-4">
           <h3 class="font-bold text-gray-900 dark:text-white">Insert link</h3>
-
-          <!-- Mode tabs -->
           <div class="flex rounded-lg border dark:border-gray-600 overflow-hidden text-sm w-fit">
-            <button
-              :class="['px-4 py-2 font-medium transition', linkMode === 'page' ? 'bg-indigo-600 text-white' : 'text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700']"
-              @click="linkMode = 'page'; linkHref = ''"
-            >Page</button>
-            <button
-              :class="['px-4 py-2 font-medium transition', linkMode === 'url' ? 'bg-indigo-600 text-white' : 'text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700']"
-              @click="linkMode = 'url'; linkHref = linkHref.startsWith('/') ? 'https://' : linkHref"
-            >URL</button>
+            <button :class="['px-4 py-2 font-medium transition', linkMode === 'page' ? 'bg-indigo-600 text-white' : 'text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700']" @click="linkMode = 'page'; linkHref = ''">Page</button>
+            <button :class="['px-4 py-2 font-medium transition', linkMode === 'url'  ? 'bg-indigo-600 text-white' : 'text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700']" @click="linkMode = 'url'; linkHref = linkHref.startsWith('/') ? 'https://' : linkHref">URL</button>
           </div>
-
-          <!-- Page picker -->
           <div v-if="linkMode === 'page'">
             <label class="block text-xs font-medium text-gray-500 mb-1">Select page</label>
             <select v-model="linkHref" class="w-full border rounded-lg px-3 py-2 text-sm dark:bg-gray-700 dark:border-gray-600 dark:text-white">
@@ -179,36 +177,17 @@ const toolbarGroups: TipBtn[][] = [
               <option v-for="p in pages" :key="p._id" :value="p.slug">{{ p.title }} ({{ p.slug }})</option>
             </select>
           </div>
-
-          <!-- URL input -->
           <div v-else>
             <label class="block text-xs font-medium text-gray-500 mb-1">URL</label>
-            <input
-              v-model="linkHref"
-              type="url"
-              placeholder="https://example.com"
-              class="w-full border rounded-lg px-3 py-2 text-sm dark:bg-gray-700 dark:border-gray-600 dark:text-white"
-              @keydown.enter.prevent="applyLink"
-            />
+            <input v-model="linkHref" type="url" placeholder="https://example.com" class="w-full border rounded-lg px-3 py-2 text-sm dark:bg-gray-700 dark:border-gray-600 dark:text-white" @keydown.enter.prevent="applyLink" />
           </div>
-
           <label class="flex items-center gap-2 cursor-pointer text-sm text-gray-700 dark:text-gray-300">
-            <input type="checkbox" v-model="linkNewTab" class="rounded" />
-            Open in new tab
+            <input type="checkbox" v-model="linkNewTab" class="rounded" /> Open in new tab
           </label>
-
           <div class="flex gap-2 justify-end pt-1">
-            <button
-              v-if="editor?.isActive('link')"
-              class="px-3 py-1.5 text-sm text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition"
-              @click="removeLink"
-            >Remove link</button>
+            <button v-if="editor?.isActive('link')" class="px-3 py-1.5 text-sm text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition" @click="removeLink">Remove link</button>
             <button class="px-3 py-1.5 text-sm text-gray-600 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition" @click="showLinkDialog = false">Cancel</button>
-            <button
-              class="px-4 py-1.5 text-sm bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition disabled:opacity-50"
-              :disabled="!linkHref"
-              @click="applyLink"
-            >Apply</button>
+            <button class="px-4 py-1.5 text-sm bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition disabled:opacity-50" :disabled="!linkHref" @click="applyLink">Apply</button>
           </div>
         </div>
       </div>

@@ -1,10 +1,10 @@
-import { useGitStore } from '~/server/lib/store'
+import { useGitStore, COLLECTION } from '~/server/lib/store'
 import { requireRole } from '~/server/lib/auth'
+import type { Page } from '~/types'
 
 /**
  * POST /api/sessions/:id/publish
- * Merges the session's draft branch into main.
- * Returns { status: 'ok' } or { status: 'conflict', conflicts: [...] }.
+ * Promotes all draft pages in the session to published, then merges into main.
  */
 export default defineEventHandler(async (event) => {
   if (event.method !== 'POST') {
@@ -21,9 +21,17 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 403, statusMessage: 'Forbidden' })
   }
 
+  // Promote draft pages to published before merging
+  const draftPages = await store.sessionFind<Page>(
+    id, COLLECTION.PAGES, (p) => p.status === 'draft'
+  )
+  for (const page of draftPages) {
+    await store.sessionUpdate(id, COLLECTION.PAGES, page._id!, { status: 'published' },
+      `feat(pages): publish "${page.title}"`)
+  }
+
   const result = await store.publishSession(id)
 
-  // 200 for clean merge, 409 for conflict
   if (result.status === 'conflict') {
     setResponseStatus(event, 409)
   }

@@ -3,6 +3,7 @@
 export type BlockType =
   | 'hero'
   | 'rich-text'
+  | 'media-text'
   | 'grid'
   | 'image'
   | 'gallery'
@@ -19,6 +20,17 @@ export interface Block {
   slot: string         // layout slot: 'main' | 'sidebar' | 'hero' | etc.
   visible: boolean
   props: Record<string, unknown>
+  customCss?: string
+}
+
+export interface PageStyle {
+  bgImage?: string
+  bgColor?: string
+  bgSize?: 'cover' | 'contain' | 'auto'
+  bgPosition?: string
+  bgFixed?: boolean
+  bgOverlay?: number    // 0–100 opacity of a dark overlay
+  customCss?: string
 }
 
 // ─── Page ──────────────────────────────────────────────────────────────────────
@@ -40,11 +52,17 @@ export interface PageMeta {
   canonical?: string
 }
 
+export interface PageLayoutOptions {
+  sidebarWidth?: number  // percentage 10–50, only used by sidebar-left / sidebar-right
+}
+
 export interface Page {
   _id?: string
   slug: string           // e.g. "/about/team" — leading slash included
   title: string
   layout: LayoutType
+  layoutOptions?: PageLayoutOptions
+  style?: PageStyle
   status: PageStatus
   meta: PageMeta
   blocks: Block[]
@@ -87,11 +105,14 @@ export interface NavItem {
   children?: NavItem[]
 }
 
+export type NavStyle = 'topbar' | 'sidebar-left'
+
 export interface SiteSettings {
   siteName: string
   tagline?: string
   logo?: string
   favicon?: string
+  navStyle?: NavStyle
   nav: NavItem[]
   footer: NavItem[]
   socialLinks: Record<string, string>

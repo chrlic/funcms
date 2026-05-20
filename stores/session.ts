@@ -22,17 +22,35 @@ export const useSessionStore = defineStore('session', {
   },
 
   actions: {
-    /** Open a new draft session (creates a git branch) */
-    async openSession() {
-      const data = await $fetch<{ data: EditorSession }>('/api/sessions', {
-        method: 'POST',
-      })
+    clearSession() {
+      this.currentSession = null
+      this.conflicts = []
+      this.isDirty = false
+    },
+
+    /**
+     * Ensure an active session exists, creating one if needed.
+     * Validates any persisted session against the server first.
+     */
+    async ensureSession(): Promise<EditorSession> {
+      if (this.currentSession) {
+        try {
+          await $fetch(`/api/sessions/${this.currentSession.id}`)
+          if (this.isActive) return this.currentSession
+        } catch {
+          this.clearSession()
+        }
+      }
+      return this.openSession()
+    },
+
+    async openSession(): Promise<EditorSession> {
+      const data = await $fetch<{ data: EditorSession }>('/api/sessions', { method: 'POST' })
       this.currentSession = data.data
       this.isDirty = false
       return data.data
     },
 
-    /** Fetch what has changed in the current session vs main */
     async fetchDiff() {
       if (!this.currentSession) return []
       const data = await $fetch<{ data: ReturnType<typeof Object.create> }>(
@@ -41,7 +59,6 @@ export const useSessionStore = defineStore('session', {
       return data.data
     },
 
-    /** Attempt to publish (merge) the session into main */
     async publish(): Promise<PublishResult> {
       if (!this.currentSession) throw new Error('No active session')
 
@@ -49,7 +66,6 @@ export const useSessionStore = defineStore('session', {
         `/api/sessions/${this.currentSession.id}/publish`,
         { method: 'POST' }
       ).catch((e) => {
-        // 409 Conflict — parse response
         if (e.response?.status === 409) return e.data as { data: PublishResult }
         throw e
       })
@@ -60,15 +76,12 @@ export const useSessionStore = defineStore('session', {
         this.conflicts = result.conflicts ?? []
         if (this.currentSession) this.currentSession.status = 'conflict'
       } else {
-        this.currentSession = null
-        this.conflicts = []
-        this.isDirty = false
+        this.clearSession()
       }
 
       return result
     },
 
-    /** Submit field-level resolutions and retry publish */
     async resolve(resolutions: FieldResolution[]): Promise<PublishResult> {
       if (!this.currentSession) throw new Error('No active session')
 
@@ -85,21 +98,16 @@ export const useSessionStore = defineStore('session', {
       if (result.status === 'conflict') {
         this.conflicts = result.conflicts ?? []
       } else {
-        this.currentSession = null
-        this.conflicts = []
-        this.isDirty = false
+        this.clearSession()
       }
 
       return result
     },
 
-    /** Discard all changes and delete the draft branch */
     async abandon() {
       if (!this.currentSession) return
       await $fetch(`/api/sessions/${this.currentSession.id}/abandon`, { method: 'POST' })
-      this.currentSession = null
-      this.conflicts = []
-      this.isDirty = false
+      this.clearSession()
     },
 
     markDirty() {
