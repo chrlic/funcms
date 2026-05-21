@@ -14,6 +14,9 @@ node_modules/
 # (content repo lives at ../funcms-content, outside this tree)
 .worktrees/
 
+# Safety net: if CONTENT_DIR is ever misconfigured to point inside the app dir
+content/
+
 # OS
 .DS_Store
 Thumbs.db
