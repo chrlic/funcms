@@ -27,6 +27,11 @@ const blockHints: Record<string, CssHintGroup[]> = {
       { selector: 'img', element: 'Background image', example: 'object-position: top center' },
       { selector: 'div:nth-child(2)', element: 'Dark overlay div', example: 'opacity: 0.3' },
     ]},
+    { label: 'Mobile (≤ 768px)', hints: [
+      { selector: '@media (max-width: 768px) { & section', element: 'Hero on mobile', example: 'min-height: 50vh; padding: 2rem 1rem }' },
+      { selector: '@media (max-width: 768px) { & h1', element: 'Heading on mobile', example: 'font-size: 2.25rem }' },
+      { selector: '@media (max-width: 768px) { & a', element: 'Button on mobile', example: 'width: 100%; text-align: center }' },
+    ]},
   ],
 
   'rich-text': [
@@ -48,6 +53,11 @@ const blockHints: Record<string, CssHintGroup[]> = {
       { selector: '.prose pre', element: 'Code block', example: 'background: #1e293b; color: #e2e8f0' },
       { selector: '.prose hr', element: 'Horizontal rule', example: 'border-color: #e2e8f0; margin: 2rem 0' },
     ]},
+    { label: 'Mobile (≤ 768px)', hints: [
+      { selector: '@media (max-width: 768px) { &', element: 'Wrapper on mobile', example: 'padding: 1.5rem 1rem }' },
+      { selector: '@media (max-width: 768px) { & .prose h1', element: 'H1 on mobile', example: 'font-size: 1.75rem }' },
+      { selector: '@media (max-width: 768px) { & .prose h2', element: 'H2 on mobile', example: 'font-size: 1.5rem }' },
+    ]},
   ],
 
   'media-text': [
@@ -65,11 +75,16 @@ const blockHints: Record<string, CssHintGroup[]> = {
       { selector: '.prose h2', element: 'Heading', example: 'font-size: 2.5rem; margin-bottom: 1rem' },
       { selector: '.prose p', element: 'Paragraph', example: 'line-height: 1.75' },
     ]},
+    { label: 'Mobile (≤ 768px)', hints: [
+      { selector: '@media (max-width: 768px) { & > div:first-child', element: 'Image on mobile (stacked)', example: 'width: 100% }' },
+      { selector: '@media (max-width: 768px) { & img', element: 'Image on mobile', example: 'max-height: 280px; object-fit: cover }' },
+      { selector: '@media (max-width: 768px) { &', element: 'Row on mobile', example: 'padding: 2rem 1rem; gap: 1.5rem }' },
+    ]},
   ],
 
   'cta': [
     { label: 'Container', hints: [
-      { selector: '& section', element: 'CTA section', example: 'background: linear-gradient(135deg, #6366f1, #8b5cf6); border-radius: 1.5rem' },
+      { selector: 'section', element: 'CTA section', example: 'background: linear-gradient(135deg, #6366f1, #8b5cf6); border-radius: 1.5rem' },
     ]},
     { label: 'Text', hints: [
       { selector: 'h2', element: 'Heading', example: 'font-size: 2.5rem; font-weight: 800' },
@@ -80,6 +95,11 @@ const blockHints: Record<string, CssHintGroup[]> = {
       { selector: 'a:last-of-type', element: 'Secondary button', example: 'border: 2px solid white; border-radius: 9999px' },
       { selector: 'a:hover', element: 'Button hover', example: 'transform: translateY(-2px); box-shadow: 0 8px 24px rgba(0,0,0,0.2)' },
     ]},
+    { label: 'Mobile (≤ 768px)', hints: [
+      { selector: '@media (max-width: 768px) { & section', element: 'CTA on mobile', example: 'padding: 2.5rem 1.25rem }' },
+      { selector: '@media (max-width: 768px) { & h2', element: 'Heading on mobile', example: 'font-size: 1.75rem }' },
+      { selector: '@media (max-width: 768px) { & a', element: 'Buttons on mobile (full width)', example: 'width: 100%; display: block }' },
+    ]},
   ],
 
   'image': [
@@ -87,6 +107,9 @@ const blockHints: Record<string, CssHintGroup[]> = {
       { selector: 'figure', element: 'Figure wrapper', example: 'margin: 2rem 0' },
       { selector: 'img', element: 'Image', example: 'border-radius: 1rem; box-shadow: 0 4px 24px rgba(0,0,0,0.1)' },
       { selector: 'figcaption', element: 'Caption', example: 'font-style: italic; font-size: 0.875rem; color: #6b7280' },
+    ]},
+    { label: 'Mobile (≤ 768px)', hints: [
+      { selector: '@media (max-width: 768px) { & img', element: 'Image on mobile', example: 'border-radius: 0.5rem }' },
     ]},
   ],
 
@@ -97,6 +120,10 @@ const blockHints: Record<string, CssHintGroup[]> = {
       { selector: 'img', element: 'Gallery image', example: 'object-fit: cover; aspect-ratio: 1/1' },
       { selector: 'figcaption', element: 'Image caption', example: 'font-size: 0.75rem; padding: 0.25rem 0.5rem' },
     ]},
+    { label: 'Mobile (≤ 768px)', hints: [
+      { selector: '@media (max-width: 640px) { & > div', element: 'Force single column on mobile', example: 'grid-template-columns: 1fr !important }' },
+      { selector: '@media (max-width: 640px) { & img', element: 'Image height on mobile', example: 'height: 200px }' },
+    ]},
   ],
 
   'video': [
@@ -104,6 +131,10 @@ const blockHints: Record<string, CssHintGroup[]> = {
       { selector: '&', element: 'Block wrapper', example: 'margin: 2rem 0' },
       { selector: 'p', element: 'Video title', example: 'font-weight: 700; font-size: 1.25rem' },
       { selector: 'iframe', element: 'Video iframe', example: 'border-radius: 0.75rem' },
+    ]},
+    { label: 'Mobile (≤ 768px)', hints: [
+      { selector: '@media (max-width: 768px) { &', element: 'Wrapper on mobile', example: 'margin: 1rem 0 }' },
+      { selector: '@media (max-width: 768px) { & p', element: 'Title on mobile', example: 'font-size: 1rem }' },
     ]},
   ],
 
@@ -118,6 +149,10 @@ const blockHints: Record<string, CssHintGroup[]> = {
       { selector: 'p', element: 'Card body text', example: 'color: #6b7280; line-height: 1.6' },
       { selector: 'a', element: 'Card link', example: 'color: #6366f1; font-weight: 600' },
     ]},
+    { label: 'Mobile (≤ 640px)', hints: [
+      { selector: '@media (max-width: 640px) { & > div', element: 'Force single column on mobile', example: 'grid-template-columns: 1fr !important }' },
+      { selector: '@media (max-width: 640px) { & img', element: 'Card image on mobile', example: 'height: 160px }' },
+    ]},
   ],
 
   'divider': [
@@ -131,12 +166,18 @@ const blockHints: Record<string, CssHintGroup[]> = {
     { label: 'Wrapper', hints: [
       { selector: '&', element: 'HTML wrapper div', example: 'padding: 2rem; background: #f8fafc' },
     ]},
+    { label: 'Mobile (≤ 768px)', hints: [
+      { selector: '@media (max-width: 768px) { &', element: 'Wrapper on mobile', example: 'padding: 1rem; overflow-x: auto }' },
+    ]},
   ],
 
   'grid': [
     { label: 'Grid', hints: [
       { selector: '&', element: 'Grid container', example: 'gap: 1.5rem; padding: 2rem 0' },
       { selector: '& > div', element: 'Grid cell', example: 'background: #f8fafc; border-radius: 0.75rem' },
+    ]},
+    { label: 'Mobile (≤ 640px)', hints: [
+      { selector: '@media (max-width: 640px) { &', element: 'Force single column on mobile', example: 'grid-template-columns: 1fr !important }' },
     ]},
   ],
 }
@@ -165,6 +206,11 @@ export const pageCssHints: CssHintGroup[] = [
     { selector: '.layout-sidebar-left aside', element: 'Sidebar column', example: 'background: #f8fafc' },
     { selector: '.layout-sidebar-right aside', element: 'Right sidebar column', example: 'background: #f8fafc' },
   ]},
+  { label: 'Mobile (≤ 768px)', hints: [
+    { selector: '@media (max-width: 768px) { main', element: 'Page content on mobile', example: 'padding: 0 }' },
+    { selector: '@media (max-width: 768px) { .layout-sidebar-left', element: 'Sidebar layout on mobile (stacked)', example: 'flex-direction: column }' },
+    { selector: '@media (max-width: 768px) { .layout-sidebar-left aside', element: 'Sidebar on mobile', example: 'width: 100% !important; order: 2 }' },
+  ]},
 ]
 
 // Global/site-level hints — used in Settings > Custom CSS
@@ -184,6 +230,12 @@ export const siteCssHints: CssHintGroup[] = [
   ]},
   { label: 'Blocks (all)', hints: [
     { selector: '[class*="block-"]', element: 'Every block wrapper', example: 'transition: opacity 0.3s' },
+  ]},
+  { label: 'Mobile (≤ 768px)', hints: [
+    { selector: '@media (max-width: 768px) { body', element: 'Body on mobile', example: 'font-size: 15px }' },
+    { selector: '@media (max-width: 768px) { h1', element: 'H1 on mobile', example: 'font-size: 2rem }' },
+    { selector: '@media (max-width: 768px) { h2', element: 'H2 on mobile', example: 'font-size: 1.5rem }' },
+    { selector: '@media (max-width: 768px) { header', element: 'Nav bar on mobile', example: 'padding: 0 1rem }' },
   ]},
 ]
 

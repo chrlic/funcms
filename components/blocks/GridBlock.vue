@@ -13,16 +13,14 @@ const parsedItems = computed(() => {
   try { return JSON.parse(props.items) as unknown[] } catch { return [] }
 })
 
-const gridClass = computed(() => ({
-  'grid': true,
-  'grid-cols-2': props.columns === '2',
-  'grid-cols-3': props.columns === '3',
-  'grid-cols-4': props.columns === '4',
-  'gap-0': props.gap === 'none',
-  'gap-4': props.gap === 'sm',
-  'gap-6': props.gap === 'md',
-  'gap-10': props.gap === 'lg',
-}))
+// Mobile: 1 col always. sm: 2 col. md+: editor-chosen value.
+const gridClass = computed(() => [
+  'grid',
+  'grid-cols-1',
+  'sm:grid-cols-2',
+  props.columns === '2' ? 'md:grid-cols-2' : props.columns === '4' ? 'md:grid-cols-4' : 'md:grid-cols-3',
+  props.gap === 'none' ? 'gap-0' : props.gap === 'sm' ? 'gap-4' : props.gap === 'lg' ? 'gap-10' : 'gap-6',
+])
 </script>
 
 <template>

@@ -146,7 +146,7 @@ export class BranchedGitStore extends GitStore {
   private contentDir: string
   private authorName: string
   private authorEmail: string
-  private mainGit: SimpleGit
+  private mainGit!: SimpleGit
   /** sessionId → WorktreeStore */
   private worktrees: Map<string, WorktreeStore> = new Map()
   /** sessionId → EditorSession (in-memory, also persisted as JSON in sessions/) */
@@ -164,13 +164,14 @@ export class BranchedGitStore extends GitStore {
     this.contentDir = path.resolve(opts.contentDir)
     this.authorName = opts.authorName
     this.authorEmail = opts.authorEmail
-    this.mainGit = simpleGit(this.contentDir)
+    // mainGit initialised in init() after directory is created by super.init()
   }
 
   // ─── Init ────────────────────────────────────────────────────────────────────
 
   override async init(): Promise<void> {
     await super.init()
+    this.mainGit = simpleGit(this.contentDir)
 
     // Ensure we're on main branch (rename master → main if needed)
     const branches = await this.mainGit.branchLocal()

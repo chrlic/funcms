@@ -24,7 +24,7 @@ export interface StoreRecord {
 type Index = Map<string, StoreRecord>
 
 export class GitStore {
-  private git: SimpleGit
+  private git!: SimpleGit
   private contentDir: string
   private authorName: string
   private authorEmail: string
@@ -44,13 +44,14 @@ export class GitStore {
     this.authorName = opts.authorName
     this.authorEmail = opts.authorEmail
     this.gitRemote = opts.gitRemote ?? ''
-    this.git = simpleGit(this.contentDir)
+    // git is initialised in init() after the directory is created
   }
 
   // ─── Initialization ────────────────────────────────────────────────────────
 
   async init(): Promise<void> {
     await fs.mkdir(this.contentDir, { recursive: true })
+    this.git = simpleGit(this.contentDir)
 
     const isRepo = await this.git.checkIsRepo().catch(() => false)
     if (!isRepo) {

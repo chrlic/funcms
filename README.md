@@ -14,12 +14,13 @@ Pages are composed of ordered **blocks** (Hero, Rich Text, Media+Text, CTA, Gall
 4. [Git / content store](#git--content-store)
 5. [Production build](#production-build)
 6. [Setup on macOS](#setup-on-macos)
-7. [Running on a fresh Linux server](#running-on-a-fresh-linux-server)
-8. [Reverse proxy (nginx)](#reverse-proxy-nginx)
-9. [Process manager (PM2)](#process-manager-pm2)
-10. [Docker](#docker)
-11. [Remote content backup](#remote-content-backup)
-12. [Architecture overview](#architecture-overview)
+7. [Running on a fresh Linux server — Debian / Ubuntu](#running-on-a-fresh-linux-server--debian--ubuntu)
+8. [Running on a fresh Linux server — RHEL / CentOS / Fedora](#running-on-a-fresh-linux-server--rhel--centos--fedora)
+9. [Reverse proxy (nginx)](#reverse-proxy-nginx)
+10. [Process manager (PM2)](#process-manager-pm2)
+11. [Docker](#docker)
+12. [Remote content backup](#remote-content-backup)
+13. [Architecture overview](#architecture-overview)
 
 ---
 
@@ -101,9 +102,10 @@ funcms-content/      ← content repo (auto-created, separate repo)
 The content repo is **created and initialised automatically** at `CONTENT_DIR` on first run. You do not need to create the directory or run `git init` manually. The startup plugin:
 
 1. Creates the directory (including any missing parent directories)
-2. Runs `git init` if it is not already a repository
-3. Makes an initial commit so `HEAD` exists
-4. Sets `user.name` / `user.email` locally inside the repo from `GIT_AUTHOR_NAME` / `GIT_AUTHOR_EMAIL`
+2. Initialises the `simple-git` instance against that directory
+3. Runs `git init` if it is not already a repository
+4. Makes an initial commit so `HEAD` exists
+5. Sets `user.name` / `user.email` locally inside the repo from `GIT_AUTHOR_NAME` / `GIT_AUTHOR_EMAIL`
 
 Because the identity is written into the repo's local config, **global git config is not required** on the server.
 
@@ -261,9 +263,9 @@ ipconfig getifaddr en1    # Ethernet
 
 ---
 
-## Running on a fresh Linux server
+## Running on a fresh Linux server — Debian / Ubuntu
 
-These steps assume Ubuntu 22.04 / Debian 12. Adapt package manager calls for other distros.
+These steps are for Ubuntu 22.04 / 24.04 and Debian 11 / 12.
 
 ### 1 — Install Node.js 22.x
 
@@ -329,13 +331,159 @@ Visit `http://<server-ip>:3000/admin`. Log in with your `ADMIN_EMAIL` / `ADMIN_P
 
 ---
 
-## Reverse proxy (nginx)
+## Running on a fresh Linux server — RHEL / CentOS / Fedora
 
-Install nginx and create a site config:
+These steps cover:
+- **RHEL 8 / 9** and **AlmaLinux 8 / 9** and **Rocky Linux 8 / 9**
+- **CentOS Stream 9**
+- **Fedora 38+**
+
+Commands use `dnf`. On older CentOS 7 / RHEL 7 replace `dnf` with `yum`.
+
+### 1 — Install Node.js 22.x
+
+Use the NodeSource repository:
 
 ```bash
+curl -fsSL https://rpm.nodesource.com/setup_22.x | sudo bash -
+sudo dnf install -y nodejs
+node --version   # v22.x.x
+npm --version
+```
+
+On **Fedora** the default repo often has a recent-enough Node:
+
+```bash
+sudo dnf install -y nodejs npm
+node --version
+```
+
+If the version is too old, use the NodeSource method above instead.
+
+### 2 — Install git
+
+```bash
+sudo dnf install -y git
+git --version    # 2.39+ on RHEL 9 / Fedora
+```
+
+On **RHEL 8** the default git may be 2.27. That's sufficient, but if you want newer:
+
+```bash
+sudo dnf install -y https://packages.endpointdev.com/rhel/8/os/x86_64/endpoint-repo.x86_64.rpm
+sudo dnf install -y git
+```
+
+No global git config is needed — identity is written into the content repo by the app on startup.
+
+### 3 — Open the firewall port
+
+RHEL-family systems use `firewalld` by default:
+
+```bash
+sudo firewall-cmd --permanent --add-port=3000/tcp
+sudo firewall-cmd --reload
+```
+
+If you are running nginx as a reverse proxy (recommended) you only need port 80/443:
+
+```bash
+sudo firewall-cmd --permanent --add-service=http
+sudo firewall-cmd --permanent --add-service=https
+sudo firewall-cmd --reload
+```
+
+### 4 — Create an app user (recommended)
+
+```bash
+sudo useradd -m -s /bin/bash funcms
+sudo su - funcms
+```
+
+### 5 — Clone and configure the app
+
+```bash
+git clone https://github.com/chrlic/funcms.git
+cd funcms
+npm install
+cp .env.example .env
+```
+
+Edit `.env`:
+
+```bash
+nano .env
+```
+
+Minimum required changes:
+
+```dotenv
+JWT_SECRET=<64-char random hex string>
+ADMIN_EMAIL=you@yourdomain.com
+ADMIN_PASSWORD=<strong password>
+NODE_ENV=production
+```
+
+Generate a secure `JWT_SECRET`:
+
+```bash
+node -e "console.log(require('crypto').randomBytes(48).toString('hex'))"
+```
+
+### 6 — Build
+
+```bash
+npm run build
+```
+
+### 7 — Start (test run)
+
+```bash
+node .output/server/index.mjs
+```
+
+Visit `http://<server-ip>:3000/admin`. The content repo is created at `../funcms-content` automatically.
+
+### SELinux note
+
+If the app starts but the browser gets connection refused even with the port open, SELinux may be blocking Node from binding. Allow it:
+
+```bash
+# Allow Node.js to listen on port 3000
+sudo semanage port -a -t http_port_t -p tcp 3000
+```
+
+If `semanage` is not installed:
+
+```bash
+sudo dnf install -y policycoreutils-python-utils
+```
+
+Alternatively, if running behind nginx (recommended), only nginx needs port access and Node only listens on `127.0.0.1` — no SELinux change needed for the app port itself.
+
+---
+
+## Reverse proxy (nginx)
+
+Install nginx:
+
+```bash
+# Debian / Ubuntu
 sudo apt-get install -y nginx
+
+# RHEL / AlmaLinux / Rocky / CentOS Stream / Fedora
+sudo dnf install -y nginx
+sudo systemctl enable --now nginx
+```
+
+On RHEL-family systems nginx uses `/etc/nginx/conf.d/` instead of `sites-available`. Create a config file there:
+
+```bash
+# Debian / Ubuntu
 sudo nano /etc/nginx/sites-available/funcms
+
+# RHEL-family
+sudo nano /etc/nginx/conf.d/funcms.conf
 ```
 
 ```nginx
@@ -361,14 +509,23 @@ server {
 ```
 
 ```bash
+# Debian / Ubuntu — enable via symlink
 sudo ln -s /etc/nginx/sites-available/funcms /etc/nginx/sites-enabled/
+
+# All distros — test and reload
 sudo nginx -t && sudo systemctl reload nginx
 ```
 
 ### HTTPS with Let's Encrypt
 
 ```bash
+# Debian / Ubuntu
 sudo apt-get install -y certbot python3-certbot-nginx
+
+# RHEL-family
+sudo dnf install -y certbot python3-certbot-nginx
+
+# All distros
 sudo certbot --nginx -d yourdomain.com -d www.yourdomain.com
 ```
 
@@ -378,32 +535,115 @@ Certbot automatically updates the nginx config and sets up auto-renewal.
 
 ## Process manager (PM2)
 
-PM2 keeps the app running after logout and restarts it on crash.
+PM2 keeps the app running after logout, restarts it on crash, and integrates with systemd so it survives reboots. These instructions apply to both Debian/Ubuntu and RHEL-family systems.
+
+### Install PM2
 
 ```bash
 sudo npm install -g pm2
+```
 
-# Start the app
+### Start the app
+
+Run this as the `funcms` user (or whichever user owns the app directory):
+
+```bash
+cd ~/funcms
 pm2 start .output/server/index.mjs \
   --name funcms \
   --env production \
   -- --port 3000
-
-# Save the process list so it survives reboots
-pm2 save
-
-# Generate and enable the systemd startup script
-pm2 startup systemd -u funcms --hp /home/funcms
-# Run the printed sudo command to enable it
 ```
 
-Useful PM2 commands:
+Verify it started:
 
 ```bash
-pm2 status          # list processes
-pm2 logs funcms     # tail logs
-pm2 restart funcms  # restart after a redeploy
-pm2 stop funcms     # stop
+pm2 status
+```
+
+You should see `funcms` listed with status `online`.
+
+### Enable auto-start on boot (systemd)
+
+This works on all modern Linux distributions (Ubuntu, Debian, RHEL, AlmaLinux, Rocky, Fedora — anything running systemd):
+
+```bash
+# Generate the startup hook — run as the app user
+pm2 startup systemd -u funcms --hp /home/funcms
+```
+
+PM2 prints a `sudo env ...` command. **Copy and run that exact command** — it registers a systemd service that starts PM2 on boot.
+
+Then save the current process list so PM2 knows what to restore:
+
+```bash
+pm2 save
+```
+
+Confirm the systemd service is active:
+
+```bash
+sudo systemctl status pm2-funcms
+```
+
+### Managing the service
+
+```bash
+pm2 status                  # show all processes and their state
+pm2 logs funcms             # tail live logs (Ctrl+C to exit)
+pm2 logs funcms --lines 100 # last 100 log lines
+pm2 restart funcms          # restart the app
+pm2 reload funcms           # zero-downtime reload (for config changes)
+pm2 stop funcms             # stop without removing from process list
+pm2 delete funcms           # remove from PM2 entirely
+pm2 monit                   # live CPU / memory dashboard
+```
+
+Via systemd (useful for scripting or if PM2 daemon itself needs restarting):
+
+```bash
+sudo systemctl stop pm2-funcms
+sudo systemctl start pm2-funcms
+sudo systemctl restart pm2-funcms
+sudo journalctl -u pm2-funcms -f   # systemd logs for the PM2 daemon
+```
+
+### Environment variables
+
+PM2 reads environment variables from the shell it was started in, but for production it is better to use an ecosystem file so variables are explicit and survive restarts:
+
+```bash
+# ~/funcms/ecosystem.config.cjs
+module.exports = {
+  apps: [{
+    name: 'funcms',
+    script: '.output/server/index.mjs',
+    env_production: {
+      NODE_ENV: 'production',
+      PORT: 3000,
+    },
+  }],
+}
+```
+
+Start with the ecosystem file:
+
+```bash
+pm2 start ecosystem.config.cjs --env production
+pm2 save
+```
+
+> Add `ecosystem.config.cjs` to `.gitignore` if it contains secrets. Prefer keeping secrets in `.env` (loaded by the app at runtime) rather than in the ecosystem file.
+
+### Log rotation
+
+PM2 logs grow unbounded by default. Install the log-rotate module:
+
+```bash
+pm2 install pm2-logrotate
+pm2 set pm2-logrotate:max_size 50M
+pm2 set pm2-logrotate:retain 7
+pm2 set pm2-logrotate:compress true
 ```
 
 ### Deploying updates
@@ -411,9 +651,21 @@ pm2 stop funcms     # stop
 ```bash
 cd ~/funcms
 git pull
-npm install
-npm run build
-pm2 restart funcms
+npm install          # pick up any new dependencies
+npm run build        # rebuild .output/
+pm2 reload funcms    # zero-downtime swap to the new build
+```
+
+If the build fails, the old version keeps running. Only `pm2 reload` (not `restart`) guarantees zero downtime — it starts the new process before killing the old one.
+
+### Checking what's registered with systemd
+
+```bash
+# List all PM2-managed systemd services
+systemctl list-units | grep pm2
+
+# Show full service file PM2 generated
+cat /etc/systemd/system/pm2-funcms.service
 ```
 
 ---
