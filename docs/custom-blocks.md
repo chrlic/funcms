@@ -276,3 +276,5 @@ const parsedTiers = computed(() => {
 | `:style` bindings for dynamic CSS | `<script setup>` syntax (use plain `<script>`) |
 
 **Prop naming**: never name a prop `style`, `class`, `key`, or `ref` — these are reserved Vue attributes and will cause conflicts.
+
+**Tailwind CSS scanning**: the content repo's `block-types/*.json` files are scanned by Tailwind so classes used only in custom blocks are included in the CSS bundle. If you use a non-default `CONTENT_DIR`, make sure that env var is set before starting the dev server or running `nuxt build` — otherwise Tailwind won't find the custom block sources and those classes will be purged.
