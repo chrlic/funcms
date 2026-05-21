@@ -37,6 +37,12 @@ export default defineNuxtConfig({
     plugins: ['~/server/plugins/git-store.ts'],
   },
 
+  vite: {
+    server: {
+      allowedHosts: true,  // allow any hostname in dev — safe behind a firewall/proxy
+    },
+  },
+
   typescript: {
     strict: true,
     typeCheck: false,
