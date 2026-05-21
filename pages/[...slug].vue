@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import blockRegistry from '~/components/blocks/index'
+import staticBlockRegistry from '~/components/blocks/index'
 import LayoutFullWidth from '~/components/LayoutFullWidth.vue'
 import LayoutSidebarLeft from '~/components/LayoutSidebarLeft.vue'
 import LayoutSidebarRight from '~/components/LayoutSidebarRight.vue'
@@ -7,6 +7,8 @@ import LayoutLanding from '~/components/LayoutLanding.vue'
 import LayoutBlank from '~/components/LayoutBlank.vue'
 import type { Component } from 'vue'
 import type { Page, Block, SiteSettings } from '~/types'
+
+const { registry: customRegistry } = useCustomBlocks()
 
 const layoutMap: Record<string, Component> = {
   'full-width': LayoutFullWidth,
@@ -121,7 +123,7 @@ if (!page.value) {
         <component :is="layoutMap[page.layout] ?? LayoutFullWidth" :blocks-by-slot="blocksBySlot" :sidebar-width="page.layoutOptions?.sidebarWidth">
           <template v-for="(blocks, slotName) in blocksBySlot" :key="slotName" #[slotName]>
             <div v-for="block in blocks" :key="block.id" :class="`block-${block.id}`">
-              <component :is="blockRegistry[block.type]" v-bind="block.props" />
+              <component :is="(staticBlockRegistry as Record<string, Component>)[block.type] ?? customRegistry[block.type]" v-bind="block.props" />
             </div>
           </template>
         </component>
@@ -148,7 +150,7 @@ if (!page.value) {
         <component :is="layoutMap[page.layout] ?? LayoutFullWidth" :blocks-by-slot="blocksBySlot" :sidebar-width="page.layoutOptions?.sidebarWidth">
           <template v-for="(blocks, slotName) in blocksBySlot" :key="slotName" #[slotName]>
             <div v-for="block in blocks" :key="block.id" :class="`block-${block.id}`">
-              <component :is="blockRegistry[block.type]" v-bind="block.props" />
+              <component :is="(staticBlockRegistry as Record<string, Component>)[block.type] ?? customRegistry[block.type]" v-bind="block.props" />
             </div>
           </template>
         </component>

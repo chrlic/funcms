@@ -21,6 +21,7 @@ Pages are composed of ordered **blocks** (Hero, Rich Text, Media+Text, CTA, Gall
 11. [Docker](#docker)
 12. [Remote content backup](#remote-content-backup)
 13. [Architecture overview](#architecture-overview)
+14. [Custom block types](docs/custom-blocks.md)
 
 ---
 
@@ -786,3 +787,17 @@ cat ~/.ssh/id_ed25519.pub   # add this to GitHub/GitLab deploy keys
 | JWT in httpOnly cookie | XSS-resistant auth; also supports `Authorization` header for API clients |
 | Block + slot system | Layouts define named slots (main, sidebar, hero); blocks are assigned to slots |
 | Static block registry | All block components statically imported — SSR-safe, no dynamic import issues |
+| Custom block eval | `@vue/compiler-sfc` runs in a child_process worker to avoid Nitro bundling its optional deps |
+
+---
+
+## Custom block types
+
+You can write your own Vue components and use them as blocks in the page editor — no deployment or restart required. Components are compiled server-side on save and rendered with full SSR support.
+
+See **[docs/custom-blocks.md](docs/custom-blocks.md)** for:
+- Step-by-step creation walkthrough
+- SFC authoring guide (props, reactivity, rich text, styling)
+- Full field type reference
+- Two complete example blocks (testimonial card, pricing table)
+- Constraints and gotchas

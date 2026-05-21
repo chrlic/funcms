@@ -23,4 +23,5 @@ export const COLLECTION = {
   USERS: 'users',
   MEDIA: 'media',
   SETTINGS: 'settings',
+  BLOCK_TYPES: 'block-types',
 } as const

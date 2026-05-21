@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { blockSchemas } from '~/components/blocks/index'
-import type { Block } from '~/types'
+import type { Block, CustomBlockField } from '~/types'
 import type { PropSchema } from '~/components/blocks/index'
 import { getBlockHints } from '~/composables/useCssHints'
 
@@ -12,9 +12,26 @@ const emit = defineEmits<{
   moveDown: []
 }>()
 
+const { metas: customBlockMetas } = useCustomBlocks()
+
 const collapsed = ref(false)
 const localProps = ref<Record<string, unknown>>({ ...props.block.props })
-const schema = computed(() => blockSchemas[props.block.type] ?? {})
+
+// Convert a CustomBlockField to PropSchema so the same form renderer works for both
+function customFieldToSchema(field: CustomBlockField): PropSchema {
+  return { type: field.type, label: field.label, default: field.default, options: field.options, required: field.required }
+}
+
+const schema = computed<Record<string, PropSchema>>(() => {
+  // Built-in block
+  if (blockSchemas[props.block.type]) return blockSchemas[props.block.type]
+  // Custom block — find its field definitions
+  const meta = customBlockMetas.value.find(m => m.slug === props.block.type)
+  if (meta?.fields?.length) {
+    return Object.fromEntries(meta.fields.map(f => [f.name, customFieldToSchema(f)]))
+  }
+  return {}
+})
 
 function onField(key: string, value: unknown) {
   localProps.value = { ...localProps.value, [key]: value }

@@ -1,6 +1,6 @@
 // ─── Block System ──────────────────────────────────────────────────────────────
 
-export type BlockType =
+export type BuiltinBlockType =
   | 'hero'
   | 'rich-text'
   | 'media-text'
@@ -12,6 +12,33 @@ export type BlockType =
   | 'card-row'
   | 'divider'
   | 'raw-html'
+
+// Custom block types are stored in content repo; type string is their slug (e.g. 'my-block')
+export type BlockType = BuiltinBlockType | string
+
+// ─── Custom Block Types ────────────────────────────────────────────────────────
+
+export interface CustomBlockField {
+  name: string
+  type: 'text' | 'textarea' | 'richtext' | 'number' | 'boolean' | 'select' | 'image' | 'color' | 'url'
+  label: string
+  default?: unknown
+  options?: { label: string; value: string }[]
+  required?: boolean
+}
+
+export interface CustomBlockType {
+  _id?: string
+  slug: string          // unique identifier used as block type, e.g. 'testimonial-card'
+  label: string         // human name shown in picker, e.g. 'Testimonial Card'
+  description?: string
+  source: string        // original SFC source (template + script)
+  compiledJs: string    // compiled render function JS (server-evaluated on both SSR + client)
+  fields: CustomBlockField[]  // schema for admin form auto-generation
+  createdAt?: string
+  updatedAt?: string
+  createdBy?: string
+}
 
 export interface Block {
   id: string

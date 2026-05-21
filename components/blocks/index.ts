@@ -138,7 +138,7 @@ export const blockSchemas: Record<BlockType, Record<string, PropSchema>> = {
     ]},
   },
   'divider': {
-    style: { type: 'select', label: 'Style', default: 'line', options: [
+    dividerStyle: { type: 'select', label: 'Style', default: 'line', options: [
       { label: 'Line', value: 'line' },
       { label: 'Space', value: 'space' },
       { label: 'Dots', value: 'dots' },

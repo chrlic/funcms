@@ -1,5 +1,6 @@
 // https://nuxt.com/docs/api/configuration/nuxt-config
 export default defineNuxtConfig({
+  compatibilityDate: '2026-05-21',
   devtools: { enabled: true },
 
   modules: [
@@ -41,6 +42,13 @@ export default defineNuxtConfig({
     server: {
       allowedHosts: true,  // allow any hostname in dev — safe behind a firewall/proxy
     },
+    optimizeDeps: {
+      exclude: ['#app-manifest'],
+    },
+  },
+
+  experimental: {
+    appManifest: true,
   },
 
   typescript: {
