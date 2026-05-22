@@ -145,11 +145,24 @@ export interface TextStyle {
   color?: string      // e.g. "#1a1a1a"
 }
 
+export interface ThemeTokens {
+  background: string      // e.g. "#ffffff"
+  surface: string         // cards, panels
+  border: string          // dividers
+  textPrimary: string     // body text
+  textSecondary: string   // muted text
+  textHeading: string     // headings
+  accent: string          // links, buttons, highlights
+  accentFg: string        // text on accent background
+}
+
 export interface SiteTypography {
   bodyFont: string        // CSS font-family for base body text
   headingFont: string     // CSS font-family for h1–h6
   baseSize: string        // root font size, e.g. "16px"
   styles: TextStyle[]     // named styles available in rich-text toolbar
+  light?: ThemeTokens
+  dark?: ThemeTokens
 }
 
 export interface SiteSettings {

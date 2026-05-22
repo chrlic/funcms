@@ -79,6 +79,10 @@ function navLinkProps(item: NavItem) {
         </div>
       </nav>
 
+      <div class="hidden md:flex items-center">
+        <ThemeToggle />
+      </div>
+
       <!-- Mobile hamburger -->
       <button class="md:hidden p-2 rounded-lg text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-800" @click="mobileOpen = !mobileOpen">
         <svg v-if="mobileOpen" class="w-5 h-5" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"><path d="M6.28 5.22a.75.75 0 0 0-1.06 1.06L8.94 10l-3.72 3.72a.75.75 0 1 0 1.06 1.06L10 11.06l3.72 3.72a.75.75 0 1 0 1.06-1.06L11.06 10l3.72-3.72a.75.75 0 0 0-1.06-1.06L10 8.94 6.28 5.22Z"/></svg>
@@ -108,6 +112,9 @@ function navLinkProps(item: NavItem) {
           </component>
         </template>
       </template>
+      <div class="pt-2 pb-1 flex justify-start px-3">
+        <ThemeToggle />
+      </div>
     </div>
   </header>
 
@@ -172,6 +179,11 @@ function navLinkProps(item: NavItem) {
           </template>
         </template>
       </nav>
+
+      <!-- Sidebar footer: theme toggle -->
+      <div class="shrink-0 border-t dark:border-gray-700 px-3 py-2 flex items-center" :class="sidebarOpen ? 'justify-start' : 'justify-center'">
+        <ThemeToggle />
+      </div>
     </aside>
 
     <!-- Mobile drawer -->
@@ -199,6 +211,9 @@ function navLinkProps(item: NavItem) {
             </template>
           </template>
         </nav>
+        <div class="shrink-0 border-t dark:border-gray-700 px-4 py-3">
+          <ThemeToggle />
+        </div>
       </div>
       <!-- backdrop -->
       <div class="flex-1 bg-black/40" @click="mobileOpen = false" />

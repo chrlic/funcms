@@ -1,4 +1,4 @@
-import type { SiteTypography, TextStyle } from '~/types'
+import type { SiteTypography, TextStyle, ThemeTokens } from '~/types'
 
 /**
  * Provides site typography settings and derives CSS custom properties from them.
@@ -19,7 +19,45 @@ export function slugifyStyle(name: string) {
   return name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')
 }
 
+function tokensToCssVars(t: ThemeTokens): string {
+  return [
+    `--color-bg: ${t.background};`,
+    `--color-surface: ${t.surface};`,
+    `--color-border: ${t.border};`,
+    `--color-text: ${t.textPrimary};`,
+    `--color-text-secondary: ${t.textSecondary};`,
+    `--color-heading: ${t.textHeading};`,
+    `--color-accent: ${t.accent};`,
+    `--color-accent-fg: ${t.accentFg};`,
+  ].map(l => `  ${l}`).join('\n')
+}
+
+export const defaultLight: ThemeTokens = {
+  background: '#ffffff',
+  surface: '#f9fafb',
+  border: '#e5e7eb',
+  textPrimary: '#111827',
+  textSecondary: '#6b7280',
+  textHeading: '#111827',
+  accent: '#4f46e5',
+  accentFg: '#ffffff',
+}
+
+export const defaultDark: ThemeTokens = {
+  background: '#111827',
+  surface: '#1f2937',
+  border: '#374151',
+  textPrimary: '#f9fafb',
+  textSecondary: '#9ca3af',
+  textHeading: '#f9fafb',
+  accent: '#6366f1',
+  accentFg: '#ffffff',
+}
+
 export function typographyToCss(typo: SiteTypography): string {
+  const light = typo.light ?? defaultLight
+  const dark = typo.dark ?? defaultDark
+
   const rootLines: string[] = [
     `--font-body: ${typo.bodyFont};`,
     `--font-heading: ${typo.headingFont};`,
@@ -40,8 +78,19 @@ export function typographyToCss(typo: SiteTypography): string {
   }
 
   const vars = rootLines.map(l => `  ${l}`).join('\n')
-  const base = `:root {\n${vars}\n}\nbody { font-family: var(--font-body); font-size: var(--font-base-size); }\n.prose h1,.prose h2,.prose h3,.prose h4,.prose h5,.prose h6 { font-family: var(--font-heading); }\nh1,h2,h3,h4,h5,h6 { font-family: var(--font-heading); }`
-  return styleRules.length ? `${base}\n${styleRules.join('\n')}` : base
+
+  const css = [
+    `:root {\n${vars}\n${tokensToCssVars(light)}\n}`,
+    `.dark {\n${tokensToCssVars(dark)}\n}`,
+    `@media (prefers-color-scheme: dark) {\n  :root:not([data-theme="light"]) {\n${tokensToCssVars(dark)}\n  }\n}`,
+    `body { font-family: var(--font-body); font-size: var(--font-base-size); background-color: var(--color-bg); color: var(--color-text); }`,
+    `.prose h1,.prose h2,.prose h3,.prose h4,.prose h5,.prose h6 { font-family: var(--font-heading); color: var(--color-heading); }`,
+    `h1,h2,h3,h4,h5,h6 { font-family: var(--font-heading); color: var(--color-heading); }`,
+    `a { color: var(--color-accent); }`,
+    ...styleRules,
+  ]
+
+  return css.join('\n')
 }
 
 export function useTypography() {
