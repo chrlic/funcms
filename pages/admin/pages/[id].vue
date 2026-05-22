@@ -2,8 +2,11 @@
 import draggable from 'vuedraggable'
 import type { Page, Block, BlockType, LayoutType } from '~/types'
 import { pageCssHints } from '~/composables/useCssHints'
+import staticBlockRegistry from '~/components/blocks/index'
+import type { Component } from 'vue'
 
 const { metas: customBlockMetas } = useCustomBlocks()
+const { registry: customRegistry } = useCustomBlocks()
 const { cssVars } = useTypography()
 useHead({ style: computed(() => cssVars.value ? [{ innerHTML: cssVars.value }] : []) })
 
@@ -186,12 +189,73 @@ function onDragEnd() {
 
 // ─── History ──────────────────────────────────────────────────────────────────
 
+interface CommitEntry { hash: string; message: string; author: string; date: string }
+
 const showHistory = ref(false)
-const historyData = ref<{ data: unknown[] } | null>(null)
+const historyList = ref<CommitEntry[]>([])
+const historyLoading = ref(false)
+
+const previewCommit = ref<CommitEntry | null>(null)
+const previewPage = ref<Page | null>(null)
+const previewLoading = ref(false)
+
+const restoring = ref(false)
+const restoreError = ref('')
 
 async function loadHistory() {
   showHistory.value = true
-  historyData.value = await $fetch<{ data: unknown[] }>(`/api/pages/${id}/history`)
+  historyLoading.value = true
+  try {
+    const res = await $fetch<{ data: CommitEntry[] }>(`/api/pages/${id}/history`)
+    historyList.value = res.data
+  } finally {
+    historyLoading.value = false
+  }
+}
+
+async function previewVersion(commit: CommitEntry) {
+  previewCommit.value = commit
+  previewPage.value = null
+  previewLoading.value = true
+  restoreError.value = ''
+  try {
+    const res = await $fetch<{ data: Page }>(`/api/pages/${id}/history`, { query: { hash: commit.hash } })
+    previewPage.value = res.data
+  } finally {
+    previewLoading.value = false
+  }
+}
+
+function closePreview() {
+  previewCommit.value = null
+  previewPage.value = null
+  restoreError.value = ''
+}
+
+async function restoreVersion() {
+  if (!previewCommit.value) return
+  if (!confirm(`Restore page to version from ${new Date(previewCommit.value.date).toLocaleString()}? Current state will remain in history.`)) return
+  restoring.value = true
+  restoreError.value = ''
+  try {
+    const res = await sfetch<{ data: Page }>(`/api/pages/${id}/restore`, {
+      method: 'POST',
+      body: { hash: previewCommit.value.hash },
+    })
+    page.value = { ...res.data, blocks: res.data.blocks ?? [] }
+    session.markDirty()
+    isDirty.value = false
+    showHistory.value = false
+    closePreview()
+  } catch (e: unknown) {
+    restoreError.value = (e as { data?: { statusMessage?: string } })?.data?.statusMessage ?? 'Restore failed'
+  } finally {
+    restoring.value = false
+  }
+}
+
+function formatDate(iso: string) {
+  return new Date(iso).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })
 }
 </script>
 
@@ -489,20 +553,117 @@ async function loadHistory() {
     </div>
 
     <!-- History drawer -->
-    <div v-if="showHistory" class="fixed inset-0 z-50 bg-black/50 flex justify-end">
-      <div class="bg-white dark:bg-gray-800 w-96 h-full overflow-y-auto p-6 shadow-xl">
-        <div class="flex items-center justify-between mb-5">
-          <h2 class="text-lg font-bold">Page History</h2>
-          <button @click="showHistory = false" class="text-gray-400 hover:text-gray-600 text-2xl">×</button>
+    <div v-if="showHistory" class="fixed inset-0 z-50 bg-black/50 flex justify-end" @click.self="showHistory = false">
+      <div class="bg-white dark:bg-gray-800 w-96 h-full overflow-y-auto flex flex-col shadow-xl">
+        <div class="flex items-center justify-between px-5 py-4 border-b dark:border-gray-700 shrink-0">
+          <h2 class="text-base font-bold text-gray-900 dark:text-white">Page History</h2>
+          <button @click="showHistory = false" class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 text-xl leading-none">×</button>
         </div>
-        <div v-if="historyData?.data?.length" class="space-y-3">
-          <div v-for="(commit, i) in historyData.data" :key="i" class="border dark:border-gray-600 rounded-lg p-3 text-sm">
-            <p class="font-mono text-xs text-gray-400">{{ (commit as { hash: string }).hash?.slice(0, 7) }}</p>
-            <p class="text-gray-700 dark:text-gray-300 mt-1">{{ (commit as { message: string }).message }}</p>
-            <p class="text-xs text-gray-400 mt-1">{{ (commit as { author: string }).author }} · {{ (commit as { date: string }).date }}</p>
+
+        <div v-if="historyLoading" class="flex items-center justify-center flex-1 text-gray-400">
+          <svg class="w-5 h-5 animate-spin mr-2" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/></svg>
+          Loading…
+        </div>
+
+        <div v-else-if="historyList.length === 0" class="flex items-center justify-center flex-1 text-gray-400 text-sm">
+          No history yet.
+        </div>
+
+        <div v-else class="overflow-y-auto flex-1 divide-y dark:divide-gray-700">
+          <button
+            v-for="commit in historyList"
+            :key="commit.hash"
+            class="w-full text-left px-5 py-3.5 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 transition group"
+            @click="previewVersion(commit)"
+          >
+            <div class="flex items-start justify-between gap-2">
+              <p class="text-sm text-gray-800 dark:text-gray-200 leading-snug">{{ commit.message }}</p>
+              <svg class="w-4 h-4 text-gray-300 group-hover:text-indigo-500 shrink-0 mt-0.5 transition" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M8.22 5.22a.75.75 0 0 1 1.06 0l4.25 4.25a.75.75 0 0 1 0 1.06l-4.25 4.25a.75.75 0 0 1-1.06-1.06L11.94 10 8.22 6.28a.75.75 0 0 1 0-1.06Z" clip-rule="evenodd"/></svg>
+            </div>
+            <div class="flex items-center gap-2 mt-1">
+              <span class="font-mono text-xs text-gray-400">{{ commit.hash.slice(0, 7) }}</span>
+              <span class="text-xs text-gray-400">·</span>
+              <span class="text-xs text-gray-500">{{ commit.author }}</span>
+              <span class="text-xs text-gray-400">·</span>
+              <span class="text-xs text-gray-400">{{ formatDate(commit.date) }}</span>
+            </div>
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- History preview modal -->
+    <div v-if="previewCommit" class="fixed inset-0 z-[60] bg-black/60 flex items-start justify-center p-6 overflow-y-auto">
+      <div class="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl w-full max-w-4xl my-auto">
+        <!-- Modal header -->
+        <div class="flex items-center justify-between px-6 py-4 border-b dark:border-gray-700">
+          <div>
+            <p class="text-xs text-gray-400 font-mono">{{ previewCommit.hash.slice(0, 7) }}</p>
+            <h2 class="text-base font-bold text-gray-900 dark:text-white mt-0.5">{{ previewCommit.message }}</h2>
+            <p class="text-xs text-gray-500 mt-0.5">{{ previewCommit.author }} · {{ formatDate(previewCommit.date) }}</p>
           </div>
+          <button @click="closePreview" class="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 text-2xl leading-none ml-4">×</button>
         </div>
-        <p v-else class="text-gray-400 text-sm">No history yet.</p>
+
+        <!-- Loading -->
+        <div v-if="previewLoading" class="flex items-center justify-center py-20 text-gray-400">
+          <svg class="w-5 h-5 animate-spin mr-2" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/></svg>
+          Loading snapshot…
+        </div>
+
+        <!-- Snapshot content -->
+        <div v-else-if="previewPage">
+          <!-- Meta strip -->
+          <div class="flex flex-wrap gap-2 px-6 py-3 border-b dark:border-gray-700 bg-gray-50 dark:bg-gray-700/40">
+            <span class="px-2 py-0.5 rounded-full bg-gray-200 dark:bg-gray-600 text-gray-600 dark:text-gray-300 text-xs font-mono">{{ previewPage.slug }}</span>
+            <span :class="[
+              'px-2 py-0.5 rounded-full text-xs font-medium',
+              previewPage.status === 'published' ? 'bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-400' :
+              previewPage.status === 'draft' ? 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/40 dark:text-yellow-400' : 'bg-gray-200 text-gray-500'
+            ]">{{ previewPage.status }}</span>
+            <span class="px-2 py-0.5 rounded-full bg-gray-200 dark:bg-gray-600 text-gray-600 dark:text-gray-300 text-xs">{{ previewPage.layout }}</span>
+            <span class="px-2 py-0.5 rounded-full bg-gray-200 dark:bg-gray-600 text-gray-600 dark:text-gray-300 text-xs">{{ previewPage.blocks?.length ?? 0 }} block{{ previewPage.blocks?.length !== 1 ? 's' : '' }}</span>
+          </div>
+
+          <!-- Live block render — rendered at 1200px, scaled to ~720px wide -->
+          <div class="bg-white dark:bg-gray-900 border-b dark:border-gray-700" style="height: 60vh; overflow: hidden; position: relative;">
+            <div style="overflow-y: auto; height: calc(60vh / 0.6); transform: scale(0.6); transform-origin: top left; width: calc(100% / 0.6); pointer-events: none;">
+              <div
+                v-if="previewPage.blocks?.length"
+              >
+                <div
+                  v-for="block in [...(previewPage.blocks ?? [])].filter(b => b.visible).sort((a,b) => a.order - b.order)"
+                  :key="block.id"
+                  :class="`block-${block.id}`"
+                >
+                  <component
+                    :is="(staticBlockRegistry as Record<string, Component>)[block.type] ?? customRegistry[block.type]"
+                    v-bind="block.props"
+                  />
+                </div>
+              </div>
+              <div v-else class="flex items-center justify-center py-32 text-gray-400 text-xl italic">No visible blocks in this version</div>
+            </div>
+          </div>
+
+          <p v-if="restoreError" class="px-6 py-3 text-sm text-red-500 border-t dark:border-gray-700">{{ restoreError }}</p>
+        </div>
+
+        <!-- Modal footer -->
+        <div class="flex items-center justify-end gap-3 px-6 py-4 border-t dark:border-gray-700">
+          <button @click="closePreview" class="px-4 py-2 text-sm text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-white transition">
+            Cancel
+          </button>
+          <button
+            @click="restoreVersion"
+            :disabled="restoring || previewLoading || !previewPage"
+            class="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 disabled:opacity-50 transition"
+          >
+            <svg v-if="restoring" class="w-4 h-4 animate-spin" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/></svg>
+            <svg v-else class="w-4 h-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M7.793 2.232a.75.75 0 0 1-.025 1.06L3.622 7.25h10.003a5.375 5.375 0 0 1 0 10.75H10.75a.75.75 0 0 1 0-1.5h2.875a3.875 3.875 0 0 0 0-7.75H3.622l4.146 3.957a.75.75 0 0 1-1.036 1.085l-5.5-5.25a.75.75 0 0 1 0-1.085l5.5-5.25a.75.75 0 0 1 1.06.025Z" clip-rule="evenodd"/></svg>
+            {{ restoring ? 'Restoring…' : 'Restore this version' }}
+          </button>
+        </div>
       </div>
     </div>
   </div>

@@ -302,4 +302,23 @@ export class GitStore {
       return null
     }
   }
+
+  async repoHistory(maxCount = 50) {
+    const log = await this.git.log({ maxCount })
+    return log.all.map((c) => ({
+      hash: c.hash,
+      message: c.message,
+      author: c.author_name,
+      date: c.date,
+      files: (c as unknown as { diff?: { files?: { file: string }[] } }).diff?.files?.map((f: { file: string }) => f.file) ?? [],
+    }))
+  }
+
+  async revertToCommit(hash: string, commitMsg: string) {
+    // Hard-reset the working tree to the target commit, then recommit so history is preserved
+    await this.git.checkout([hash, '--', '.'])
+    await this.git.add(['.'])
+    await this.git.commit(commitMsg, { '--allow-empty': null })
+    await this.buildAllIndexes()
+  }
 }

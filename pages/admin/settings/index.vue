@@ -9,7 +9,7 @@ const settings = ref<SiteSettings | null>(null)
 const saving = ref(false)
 const saved = ref(false)
 const error = ref('')
-const tab = ref<'general' | 'navigation' | 'typography' | 'css'>('general')
+const tab = ref<'general' | 'navigation' | 'typography' | 'css' | 'history'>('general')
 
 const { sfetch } = useSessionFetch()
 const session = useSessionStore()
@@ -140,7 +140,54 @@ const tabs = [
   { key: 'navigation', label: 'Navigation' },
   { key: 'typography', label: 'Typography & Styles' },
   { key: 'css', label: 'Custom CSS' },
+  { key: 'history', label: 'Site History' },
 ] as const
+
+// ─── Site history ─────────────────────────────────────────────────────────────
+
+interface SiteCommit { hash: string; message: string; author: string; date: string; files: string[] }
+
+const siteHistory = ref<SiteCommit[]>([])
+const siteHistoryLoading = ref(false)
+const siteHistoryLoaded = ref(false)
+const reverting = ref<string | null>(null)
+const revertError = ref('')
+const revertDone = ref('')
+
+async function loadSiteHistory() {
+  if (siteHistoryLoaded.value) return
+  siteHistoryLoading.value = true
+  try {
+    const res = await $fetch<{ data: SiteCommit[] }>('/api/history')
+    siteHistory.value = res.data
+    siteHistoryLoaded.value = true
+  } finally {
+    siteHistoryLoading.value = false
+  }
+}
+
+watch(tab, (t) => { if (t === 'history') loadSiteHistory() })
+
+async function revertSite(commit: SiteCommit) {
+  if (!confirm(`Revert the entire site to the state at commit ${commit.hash.slice(0, 7)}?\n\n"${commit.message}"\n\nThis will create a new commit restoring all content to that point. Current state is NOT lost — it stays in history.`)) return
+  reverting.value = commit.hash
+  revertError.value = ''
+  revertDone.value = ''
+  try {
+    await sfetch('/api/history/revert', { method: 'POST', body: { hash: commit.hash } })
+    revertDone.value = commit.hash
+    siteHistoryLoaded.value = false
+    await loadSiteHistory()
+  } catch (e: unknown) {
+    revertError.value = (e as { data?: { statusMessage?: string } })?.data?.statusMessage ?? 'Revert failed'
+  } finally {
+    reverting.value = null
+  }
+}
+
+function formatDate(iso: string) {
+  return new Date(iso).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })
+}
 </script>
 
 <template>
@@ -511,6 +558,82 @@ const tabs = [
           placeholder="&lt;script src=&quot;https://…&quot;&gt;&lt;/script&gt;&#10;&lt;link rel=&quot;stylesheet&quot; href=&quot;…&quot; /&gt;"
           class="w-full border rounded-lg px-3 py-2.5 text-xs font-mono dark:bg-gray-700 dark:border-gray-600 dark:text-white resize-y"
         />
+      </div>
+    </div>
+
+    <!-- ── SITE HISTORY ───────────────────────────────────────────────────────── -->
+    <div v-else-if="tab === 'history'" class="space-y-4">
+      <div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm overflow-hidden">
+        <div class="flex items-center justify-between px-5 py-4 border-b dark:border-gray-700">
+          <div>
+            <h2 class="font-semibold text-gray-700 dark:text-gray-300 text-sm uppercase tracking-wide">Site History</h2>
+            <p class="text-xs text-gray-400 mt-0.5">Every content commit across all pages and settings. Reverting creates a new commit — no history is lost.</p>
+          </div>
+          <button @click="siteHistoryLoaded = false; loadSiteHistory()" class="text-xs text-gray-400 hover:text-indigo-500 flex items-center gap-1">
+            <svg class="w-3.5 h-3.5" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M15.312 11.424a5.5 5.5 0 0 1-9.201 2.466l-.312-.311h2.433a.75.75 0 0 0 0-1.5H3.989a.75.75 0 0 0-.75.75v4.242a.75.75 0 0 0 1.5 0v-2.43l.31.31a7 7 0 0 0 11.712-3.138.75.75 0 0 0-1.449-.39Zm1.23-3.723a.75.75 0 0 0 .219-.53V2.929a.75.75 0 0 0-1.5 0V5.36l-.31-.31A7 7 0 0 0 3.239 8.188a.75.75 0 1 0 1.448.389A5.5 5.5 0 0 1 13.89 6.11l.311.31h-2.432a.75.75 0 0 0 0 1.5h4.243a.75.75 0 0 0 .53-.219Z" clip-rule="evenodd"/></svg>
+            Refresh
+          </button>
+        </div>
+
+        <div v-if="siteHistoryLoading" class="flex items-center justify-center py-16 text-gray-400">
+          <svg class="w-5 h-5 animate-spin mr-2" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/></svg>
+          Loading history…
+        </div>
+
+        <div v-else-if="siteHistory.length === 0" class="py-12 text-center text-gray-400 text-sm italic">
+          No commits yet.
+        </div>
+
+        <div v-else>
+          <p v-if="revertError" class="px-5 py-3 text-sm text-red-500 bg-red-50 dark:bg-red-900/20 border-b dark:border-gray-700">{{ revertError }}</p>
+          <p v-if="revertDone" class="px-5 py-3 text-sm text-green-600 bg-green-50 dark:bg-green-900/20 border-b dark:border-gray-700">
+            Site reverted successfully. A new commit has been created restoring content to that point.
+          </p>
+
+          <table class="w-full text-sm">
+            <thead>
+              <tr class="text-xs uppercase tracking-wide text-gray-400 bg-gray-50 dark:bg-gray-700/50 border-b dark:border-gray-700">
+                <th class="px-5 py-2.5 text-left font-medium w-16">Hash</th>
+                <th class="px-5 py-2.5 text-left font-medium">Commit message</th>
+                <th class="px-5 py-2.5 text-left font-medium hidden lg:table-cell">Author</th>
+                <th class="px-5 py-2.5 text-left font-medium">Date</th>
+                <th class="px-5 py-2.5 text-right font-medium">Action</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y dark:divide-gray-700">
+              <tr
+                v-for="(commit, i) in siteHistory"
+                :key="commit.hash"
+                :class="[
+                  'group transition',
+                  revertDone === commit.hash ? 'bg-green-50 dark:bg-green-900/10' : 'hover:bg-gray-50 dark:hover:bg-gray-700/30',
+                  i === 0 ? 'font-medium' : '',
+                ]"
+              >
+                <td class="px-5 py-3 font-mono text-xs text-gray-400">{{ commit.hash.slice(0, 7) }}</td>
+                <td class="px-5 py-3 text-gray-700 dark:text-gray-300 max-w-xs">
+                  <span class="line-clamp-1">{{ commit.message }}</span>
+                  <span v-if="i === 0" class="ml-2 inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-indigo-100 dark:bg-indigo-900/40 text-indigo-600 dark:text-indigo-400">current</span>
+                </td>
+                <td class="px-5 py-3 text-gray-500 dark:text-gray-400 hidden lg:table-cell text-xs">{{ commit.author }}</td>
+                <td class="px-5 py-3 text-gray-400 text-xs whitespace-nowrap">{{ formatDate(commit.date) }}</td>
+                <td class="px-5 py-3 text-right">
+                  <button
+                    v-if="i !== 0"
+                    @click="revertSite(commit)"
+                    :disabled="reverting !== null"
+                    class="flex items-center gap-1.5 ml-auto px-3 py-1.5 text-xs font-medium text-indigo-600 dark:text-indigo-400 border border-indigo-200 dark:border-indigo-800 rounded-lg hover:bg-indigo-50 dark:hover:bg-indigo-900/30 disabled:opacity-40 transition"
+                  >
+                    <svg v-if="reverting === commit.hash" class="w-3.5 h-3.5 animate-spin" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"/></svg>
+                    <svg v-else class="w-3.5 h-3.5" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M7.793 2.232a.75.75 0 0 1-.025 1.06L3.622 7.25h10.003a5.375 5.375 0 0 1 0 10.75H10.75a.75.75 0 0 1 0-1.5h2.875a3.875 3.875 0 0 0 0-7.75H3.622l4.146 3.957a.75.75 0 0 1-1.036 1.085l-5.5-5.25a.75.75 0 0 1 0-1.085l5.5-5.25a.75.75 0 0 1 1.06.025Z" clip-rule="evenodd"/></svg>
+                    {{ reverting === commit.hash ? 'Reverting…' : 'Revert to this' }}
+                  </button>
+                  <span v-else class="text-xs text-gray-300 dark:text-gray-600 italic">current</span>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
       </div>
     </div>
 

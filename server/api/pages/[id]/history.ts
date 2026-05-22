@@ -6,16 +6,22 @@ export default defineEventHandler(async (event) => {
   const store = useGitStore()
   const id = getRouterParam(event, 'id')!
 
-  // GET /api/pages/:id/history — list commits for this page
   if (event.method === 'GET') {
     requireRole(event, 'editor')
     const query = getQuery(event)
+
+    // ?hash=abc123 — return the page snapshot at that commit
+    if (query.hash) {
+      const snapshot = await store.getAtCommit<Page>(COLLECTION.PAGES, id, String(query.hash))
+      if (!snapshot) throw createError({ statusCode: 404, statusMessage: 'Version not found' })
+      return { data: snapshot }
+    }
+
+    // List commits for this page
     const maxCount = Number(query.limit) || 20
     const history = await store.history(COLLECTION.PAGES, id, maxCount)
     return { data: history }
   }
 
-  // GET /api/pages/:id/history?hash=abc123 — get page at a specific commit
-  // (handled above — pass ?hash= in the GET query)
   throw createError({ statusCode: 405, statusMessage: 'Method Not Allowed' })
 })
