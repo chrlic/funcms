@@ -80,10 +80,16 @@ const overlayOpacity = computed(() => {
   return (o != null && o > 0) ? o / 100 : 0
 })
 
+// ─── Typography CSS variables ─────────────────────────────────────────────────
+
+const { cssVars: typographyCss } = useTypography()
+
 // ─── Custom CSS injection ─────────────────────────────────────────────────────
 
 const allCss = computed(() => {
   const parts: string[] = []
+  // Typography CSS custom properties (font families, named styles)
+  if (typographyCss.value) parts.push(typographyCss.value)
   // Site-wide CSS from settings
   if (settingsData.value?.data?.customCss?.trim()) parts.push(settingsData.value.data.customCss)
   // Page-level CSS

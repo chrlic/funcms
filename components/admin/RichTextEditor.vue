@@ -1,13 +1,15 @@
 <script setup lang="ts">
 import { useEditor, EditorContent } from '@tiptap/vue-3'
 import StarterKit from '@tiptap/starter-kit'
-import Link from '@tiptap/extension-link'
-import Underline from '@tiptap/extension-underline'
 import TextAlign from '@tiptap/extension-text-align'
 import Placeholder from '@tiptap/extension-placeholder'
+import { NamedStyle } from '~/composables/useTiptapNamedStyle'
+import { slugifyStyle } from '~/composables/useTypography'
 
 const props = defineProps<{ modelValue: string; placeholder?: string }>()
 const emit = defineEmits<{ 'update:modelValue': [value: string] }>()
+
+const { namedStyles } = useTypography()
 
 const { pages, load: loadPages } = usePagePicker()
 
@@ -46,11 +48,10 @@ function removeLink() {
 const editor = useEditor({
   content: props.modelValue,
   extensions: [
-    StarterKit,
-    Underline,
+    StarterKit.configure({ link: { openOnClick: false, HTMLAttributes: { rel: 'noopener noreferrer' } } }),
     TextAlign.configure({ types: ['heading', 'paragraph'] }),
-    Link.configure({ openOnClick: false, HTMLAttributes: { rel: 'noopener noreferrer' } }),
     Placeholder.configure({ placeholder: props.placeholder ?? 'Start writing…' }),
+    NamedStyle,
   ],
   onUpdate({ editor }) {
     emit('update:modelValue', editor.getHTML())
@@ -83,6 +84,31 @@ const svg = {
   alignRight: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="w-4 h-4"><path fill-rule="evenodd" d="M3 6.75A.75.75 0 0 1 3.75 6h16.5a.75.75 0 0 1 0 1.5H3.75A.75.75 0 0 1 3 6.75ZM12 12a.75.75 0 0 1 .75-.75h7.5a.75.75 0 0 1 0 1.5h-7.5A.75.75 0 0 1 12 12Zm-8.25 5.25a.75.75 0 0 1 .75-.75h16.5a.75.75 0 0 1 0 1.5H3.75a.75.75 0 0 1-.75-.75Z" clip-rule="evenodd"/></svg>',
   link: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="w-4 h-4"><path fill-rule="evenodd" d="M19.902 4.098a3.75 3.75 0 0 0-5.304 0l-4.5 4.5a3.75 3.75 0 0 0 1.035 6.037.75.75 0 0 1-.646 1.353 5.25 5.25 0 0 1-1.449-8.45l4.5-4.5a5.25 5.25 0 1 1 7.424 7.424l-1.757 1.757a.75.75 0 1 1-1.06-1.06l1.757-1.757a3.75 3.75 0 0 0 0-5.304Zm-7.389 4.267a.75.75 0 0 1 1-.353 5.25 5.25 0 0 1 1.449 8.45l-4.5 4.5a5.25 5.25 0 1 1-7.424-7.424l1.757-1.757a.75.75 0 1 1 1.06 1.06l-1.757 1.757a3.75 3.75 0 1 0 5.304 5.304l4.5-4.5a3.75 3.75 0 0 0-1.035-6.037.75.75 0 0 1-.354-1Z" clip-rule="evenodd"/></svg>',
   clear: '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" class="w-4 h-4"><path fill-rule="evenodd" d="M12 2.25c-5.385 0-9.75 4.365-9.75 9.75s4.365 9.75 9.75 9.75 9.75-4.365 9.75-9.75S17.385 2.25 12 2.25Zm-1.72 6.97a.75.75 0 1 0-1.06 1.06L10.94 12l-1.72 1.72a.75.75 0 1 0 1.06 1.06L12 13.06l1.72 1.72a.75.75 0 1 0 1.06-1.06L13.06 12l1.72-1.72a.75.75 0 1 0-1.06-1.06L12 10.94l-1.72-1.72Z" clip-rule="evenodd"/></svg>',
+}
+
+// ─── Named style picker ──────────────────────────────────────────────────────
+
+const fontDropdownOpen = ref(false)
+
+function closeFontDropdown() { fontDropdownOpen.value = false }
+onMounted(() => document.addEventListener('click', closeFontDropdown))
+onBeforeUnmount(() => document.removeEventListener('click', closeFontDropdown))
+
+const activeStyleClass = computed(() => editor.value?.getAttributes('namedStyle')?.class ?? '')
+const activeStyleName = computed(() => {
+  const cls = activeStyleClass.value
+  return namedStyles.value.find(s => slugifyStyle(s.name) === cls.replace('ts-', ''))?.name ?? 'Style'
+})
+
+function pickStyle(name: string) {
+  fontDropdownOpen.value = false
+  const e = editor.value
+  if (!e) return
+  if (!name) {
+    e.chain().focus().unsetNamedStyle().run()
+  } else {
+    e.chain().focus().setNamedStyle(`ts-${slugifyStyle(name)}`).run()
+  }
 }
 
 type TipBtn = { icon: keyof typeof svg; title: string; action: () => void; active?: () => boolean }
@@ -143,6 +169,38 @@ const toolbarGroups: TipBtn[][] = [
         @mousedown.prevent="openLinkDialog"
         v-html="svg.link"
       />
+
+      <!-- Named style picker — only shown when styles are configured in Settings → Typography -->
+      <template v-if="namedStyles.length">
+        <div class="w-px bg-gray-200 dark:bg-gray-600 mx-0.5 self-stretch" />
+        <div class="relative flex items-center">
+          <button
+            type="button"
+            title="Named style"
+            class="flex items-center gap-1 h-7 pl-2 pr-1 rounded text-xs text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600 transition"
+            @mousedown.prevent="fontDropdownOpen = !fontDropdownOpen"
+            @click.stop
+          >
+            {{ activeStyleName }}
+            <svg class="w-3 h-3 text-gray-400" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M5.22 8.22a.75.75 0 0 1 1.06 0L10 11.94l3.72-3.72a.75.75 0 1 1 1.06 1.06l-4.25 4.25a.75.75 0 0 1-1.06 0L5.22 9.28a.75.75 0 0 1 0-1.06Z" clip-rule="evenodd"/></svg>
+          </button>
+          <div v-if="fontDropdownOpen" class="absolute top-full left-0 z-50 mt-1 bg-white dark:bg-gray-800 border dark:border-gray-600 rounded-lg shadow-lg py-1 min-w-max">
+            <button
+              type="button"
+              class="w-full text-left px-3 py-1.5 text-xs text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700 transition"
+              @mousedown.prevent.stop="pickStyle('')"
+            >Default</button>
+            <button
+              v-for="s in namedStyles"
+              :key="s.name"
+              type="button"
+              class="w-full text-left px-3 py-1.5 text-xs hover:bg-gray-100 dark:hover:bg-gray-700 transition"
+              :class="`ts-${slugifyStyle(s.name)}` === activeStyleClass ? 'text-indigo-600 dark:text-indigo-400 font-medium' : 'text-gray-700 dark:text-gray-300'"
+              @mousedown.prevent.stop="pickStyle(s.name)"
+            >{{ s.name }}</button>
+          </div>
+        </div>
+      </template>
 
       <div class="flex-1" />
 

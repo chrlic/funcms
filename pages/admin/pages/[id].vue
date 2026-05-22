@@ -4,6 +4,8 @@ import type { Page, Block, BlockType, LayoutType } from '~/types'
 import { pageCssHints } from '~/composables/useCssHints'
 
 const { metas: customBlockMetas } = useCustomBlocks()
+const { cssVars } = useTypography()
+useHead({ style: computed(() => cssVars.value ? [{ innerHTML: cssVars.value }] : []) })
 
 definePageMeta({ layout: 'admin', middleware: 'admin-auth', ssr: false })
 

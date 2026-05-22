@@ -5,9 +5,9 @@ const auth = useAuthStore()
 const sidebarOpen = ref(true)
 
 const { data: settingsData } = useAsyncData<{ data: SiteSettings }>(
-  'admin-site-settings',
+  'site-settings',
   () => $fetch('/api/settings'),
-  { lazy: true, default: () => ({ data: { siteName: 'FunCMS', nav: [], footer: [], logo: '', tagline: '', favicon: '', socialLinks: {}, customCss: '', headScripts: '' } }) }
+  { lazy: true, default: () => ({ data: { siteName: 'FunCMS', nav: [], footer: [], logo: '', tagline: '', favicon: '', socialLinks: {}, customCss: '', headScripts: '', typography: { bodyFont: 'system-ui, sans-serif', headingFont: 'system-ui, sans-serif', baseSize: '16px', styles: [] } } }) }
 )
 const siteName = computed(() => settingsData.value?.data?.siteName || 'FunCMS')
 const siteLogo = computed(() => settingsData.value?.data?.logo || '')
@@ -80,6 +80,7 @@ const navIcons: Record<string, string> = {
 
       <!-- User / logout -->
       <div class="px-2 py-3 border-t dark:border-gray-700">
+        <ClientOnly>
         <div class="flex items-center gap-3 px-2 py-2">
           <div class="w-7 h-7 shrink-0 rounded-full bg-indigo-600 flex items-center justify-center text-white text-xs font-bold">
             {{ auth.user?.name?.[0]?.toUpperCase() }}
@@ -104,6 +105,7 @@ const navIcons: Record<string, string> = {
             </svg>
           </button>
         </div>
+        </ClientOnly>
       </div>
     </aside>
 

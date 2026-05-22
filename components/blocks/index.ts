@@ -62,6 +62,8 @@ export const blockSchemas: Record<BlockType, Record<string, PropSchema>> = {
       { label: 'Wide (90ch)', value: 'wide' },
       { label: 'Full', value: 'full' },
     ]},
+    fontFamily: { type: 'text', label: 'Font Family override', default: '' },
+    fontSize: { type: 'text', label: 'Font Size override', default: '' },
   },
   'media-text': {
     image: { type: 'image', label: 'Image', required: true },

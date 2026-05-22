@@ -15,6 +15,12 @@ const defaults: SiteSettings = {
   socialLinks: {},
   customCss: '',
   headScripts: '',
+  typography: {
+    bodyFont: 'system-ui, sans-serif',
+    headingFont: 'system-ui, sans-serif',
+    baseSize: '16px',
+    styles: [],
+  },
 }
 
 export default defineEventHandler(async (event) => {

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { SiteSettings, NavItem } from '~/types'
+import type { SiteSettings, NavItem, TextStyle } from '~/types'
 import { siteCssHints } from '~/composables/useCssHints'
 
 definePageMeta({ layout: 'admin', middleware: 'admin-auth', ssr: false })
@@ -13,6 +13,13 @@ const { sfetch } = useSessionFetch()
 const session = useSessionStore()
 const { pages, load: loadPages } = usePagePicker()
 
+const defaultTypography = {
+  bodyFont: 'system-ui, sans-serif',
+  headingFont: 'system-ui, sans-serif',
+  baseSize: '16px',
+  styles: [] as TextStyle[],
+}
+
 onMounted(async () => {
   const [sRes] = await Promise.all([
     $fetch<{ data: SiteSettings }>('/api/settings'),
@@ -20,7 +27,34 @@ onMounted(async () => {
   ])
   settings.value = sRes.data
   if (!settings.value.nav) settings.value.nav = []
+  if (!settings.value.typography) settings.value.typography = { ...defaultTypography }
+  if (!settings.value.typography.styles) settings.value.typography.styles = []
 })
+
+// ─── Typography helpers ───────────────────────────────────────────────────────
+
+function addTextStyle() {
+  settings.value!.typography!.styles.push({
+    name: '',
+    fontFamily: 'system-ui, sans-serif',
+    fontSize: '1rem',
+    fontWeight: '400',
+    lineHeight: '1.5',
+    color: '',
+  })
+}
+
+function removeTextStyle(i: number) {
+  settings.value!.typography!.styles.splice(i, 1)
+}
+
+const commonFonts = [
+  { label: 'System UI', value: 'system-ui, sans-serif' },
+  { label: 'Inter', value: '"Inter", system-ui, sans-serif' },
+  { label: 'Georgia', value: 'Georgia, serif' },
+  { label: 'Times New Roman', value: '"Times New Roman", Times, serif' },
+  { label: 'Courier New', value: '"Courier New", Courier, monospace' },
+]
 
 async function save() {
   if (!settings.value) return
@@ -266,6 +300,137 @@ function setHrefMode(item: NavItem, mode: HrefMode) {
                     : 'border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700'
                 ]"
               >{{ opt.label }}</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Typography -->
+        <div v-if="settings.typography" class="bg-white dark:bg-gray-800 rounded-xl shadow-sm p-5 space-y-4">
+          <h3 class="font-semibold text-gray-700 dark:text-gray-300 text-sm uppercase tracking-wide">Typography</h3>
+
+          <!-- Base fonts -->
+          <div class="grid grid-cols-2 gap-3">
+            <div>
+              <label class="block text-xs font-medium text-gray-500 mb-1">Body Font</label>
+              <select
+                class="w-full border rounded-lg px-3 py-2 text-sm dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+                :value="commonFonts.find(f => f.value === settings.typography.bodyFont) ? settings.typography.bodyFont : ''"
+                @change="(e) => { const v = (e.target as HTMLSelectElement).value; if (v) settings!.typography!.bodyFont = v }"
+              >
+                <option value="">Custom…</option>
+                <option v-for="f in commonFonts" :key="f.label" :value="f.value">{{ f.label }}</option>
+              </select>
+              <input
+                v-model="settings.typography.bodyFont"
+                type="text"
+                placeholder="system-ui, sans-serif"
+                class="mt-1 w-full border rounded-lg px-3 py-1.5 text-xs font-mono dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+              />
+            </div>
+            <div>
+              <label class="block text-xs font-medium text-gray-500 mb-1">Heading Font</label>
+              <select
+                class="w-full border rounded-lg px-3 py-2 text-sm dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+                :value="commonFonts.find(f => f.value === settings.typography.headingFont) ? settings.typography.headingFont : ''"
+                @change="(e) => { const v = (e.target as HTMLSelectElement).value; if (v) settings!.typography!.headingFont = v }"
+              >
+                <option value="">Custom…</option>
+                <option v-for="f in commonFonts" :key="f.label" :value="f.value">{{ f.label }}</option>
+              </select>
+              <input
+                v-model="settings.typography.headingFont"
+                type="text"
+                placeholder="system-ui, sans-serif"
+                class="mt-1 w-full border rounded-lg px-3 py-1.5 text-xs font-mono dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+              />
+            </div>
+          </div>
+
+          <div>
+            <label class="block text-xs font-medium text-gray-500 mb-1">Base Font Size</label>
+            <input
+              v-model="settings.typography.baseSize"
+              type="text"
+              placeholder="16px"
+              class="w-32 border rounded-lg px-3 py-2 text-sm font-mono dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+            />
+          </div>
+
+          <!-- Named text styles -->
+          <div>
+            <div class="flex items-center justify-between mb-2">
+              <div>
+                <p class="text-xs font-medium text-gray-500">Named Text Styles</p>
+                <p class="text-xs text-gray-400 mt-0.5">Available as a dropdown in every rich-text editor</p>
+              </div>
+              <button
+                @click="addTextStyle"
+                class="flex items-center gap-1 text-xs text-indigo-600 hover:underline"
+              >
+                <svg class="w-3.5 h-3.5" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"><path d="M10.75 4.75a.75.75 0 0 0-1.5 0v4.5h-4.5a.75.75 0 0 0 0 1.5h4.5v4.5a.75.75 0 0 0 1.5 0v-4.5h4.5a.75.75 0 0 0 0-1.5h-4.5v-4.5Z"/></svg>
+                Add style
+              </button>
+            </div>
+
+            <p v-if="settings.typography.styles.length === 0" class="text-xs text-gray-400 italic py-2">No named styles yet.</p>
+
+            <div class="space-y-3">
+              <div
+                v-for="(ts, i) in settings.typography.styles"
+                :key="i"
+                class="border dark:border-gray-600 rounded-lg p-3 space-y-2"
+              >
+                <div class="flex items-center gap-2">
+                  <input
+                    v-model="ts.name"
+                    type="text"
+                    placeholder="Style name (e.g. Pull Quote)"
+                    class="flex-1 border rounded-lg px-2.5 py-1.5 text-sm dark:bg-gray-700 dark:border-gray-600 dark:text-white font-medium"
+                  />
+                  <button @click="removeTextStyle(i)" class="text-gray-400 hover:text-red-500 p-1" title="Remove">
+                    <svg class="w-4 h-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M8.75 1A2.75 2.75 0 0 0 6 3.75v.443c-.795.077-1.584.176-2.365.298a.75.75 0 1 0 .23 1.482l.149-.022.841 10.518A2.75 2.75 0 0 0 7.596 19h4.807a2.75 2.75 0 0 0 2.742-2.53l.841-10.52.149.023a.75.75 0 0 0 .23-1.482A41.03 41.03 0 0 0 14 4.193V3.75A2.75 2.75 0 0 0 11.25 1h-2.5ZM10 4c.84 0 1.673.025 2.5.075V3.75c0-.69-.56-1.25-1.25-1.25h-2.5c-.69 0-1.25.56-1.25 1.25v.325C8.327 4.025 9.16 4 10 4ZM8.58 7.72a.75.75 0 0 0-1.5.06l.3 7.5a.75.75 0 1 0 1.5-.06l-.3-7.5Zm4.34.06a.75.75 0 1 0-1.5-.06l-.3 7.5a.75.75 0 1 0 1.5.06l.3-7.5Z" clip-rule="evenodd"/></svg>
+                  </button>
+                </div>
+                <div class="grid grid-cols-2 gap-2">
+                  <div>
+                    <label class="block text-xs text-gray-400 mb-0.5">Font Family</label>
+                    <input v-model="ts.fontFamily" type="text" placeholder="Georgia, serif" class="w-full border rounded-lg px-2 py-1.5 text-xs font-mono dark:bg-gray-700 dark:border-gray-600 dark:text-white" />
+                  </div>
+                  <div>
+                    <label class="block text-xs text-gray-400 mb-0.5">Font Size</label>
+                    <input v-model="ts.fontSize" type="text" placeholder="1.125rem" class="w-full border rounded-lg px-2 py-1.5 text-xs font-mono dark:bg-gray-700 dark:border-gray-600 dark:text-white" />
+                  </div>
+                  <div>
+                    <label class="block text-xs text-gray-400 mb-0.5">Weight</label>
+                    <input v-model="ts.fontWeight" type="text" placeholder="400" class="w-full border rounded-lg px-2 py-1.5 text-xs font-mono dark:bg-gray-700 dark:border-gray-600 dark:text-white" />
+                  </div>
+                  <div>
+                    <label class="block text-xs text-gray-400 mb-0.5">Line Height</label>
+                    <input v-model="ts.lineHeight" type="text" placeholder="1.6" class="w-full border rounded-lg px-2 py-1.5 text-xs font-mono dark:bg-gray-700 dark:border-gray-600 dark:text-white" />
+                  </div>
+                  <div class="col-span-2">
+                    <label class="block text-xs text-gray-400 mb-0.5">Color <span class="text-gray-300">(optional)</span></label>
+                    <div class="flex gap-2 items-center">
+                      <input v-model="ts.color" type="color" class="h-7 w-10 rounded border dark:border-gray-600 cursor-pointer bg-transparent" />
+                      <input v-model="ts.color" type="text" placeholder="#1a1a1a or empty for inherit" class="flex-1 border rounded-lg px-2 py-1.5 text-xs font-mono dark:bg-gray-700 dark:border-gray-600 dark:text-white" />
+                    </div>
+                  </div>
+                </div>
+                <!-- Preview -->
+                <div
+                  v-if="ts.name"
+                  class="mt-1 px-3 py-2 rounded bg-gray-50 dark:bg-gray-700/50 text-sm border dark:border-gray-600"
+                  :style="{
+                    fontFamily: ts.fontFamily,
+                    fontSize: ts.fontSize,
+                    fontWeight: ts.fontWeight || undefined,
+                    lineHeight: ts.lineHeight || undefined,
+                    color: ts.color || undefined,
+                  }"
+                >
+                  {{ ts.name }} — The quick brown fox
+                </div>
+              </div>
             </div>
           </div>
         </div>

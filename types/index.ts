@@ -134,6 +134,24 @@ export interface NavItem {
 
 export type NavStyle = 'topbar' | 'sidebar-left'
 
+// ─── Typography ────────────────────────────────────────────────────────────────
+
+export interface TextStyle {
+  name: string        // e.g. "Body", "Pull Quote"
+  fontFamily: string  // e.g. "Georgia, serif"
+  fontSize: string    // e.g. "1rem", "18px"
+  fontWeight?: string // e.g. "400", "700"
+  lineHeight?: string // e.g. "1.6"
+  color?: string      // e.g. "#1a1a1a"
+}
+
+export interface SiteTypography {
+  bodyFont: string        // CSS font-family for base body text
+  headingFont: string     // CSS font-family for h1–h6
+  baseSize: string        // root font size, e.g. "16px"
+  styles: TextStyle[]     // named styles available in rich-text toolbar
+}
+
 export interface SiteSettings {
   siteName: string
   tagline?: string
@@ -145,6 +163,7 @@ export interface SiteSettings {
   socialLinks: Record<string, string>
   customCss?: string
   headScripts?: string
+  typography?: SiteTypography
 }
 
 // ─── API Responses ─────────────────────────────────────────────────────────────

@@ -22,6 +22,85 @@ const saving = ref(false)
 const saveError = ref('')
 const deleteConfirm = ref<string | null>(null)
 
+// ─── Export ───────────────────────────────────────────────────────────────────
+
+function exportBlock(bt: CustomBlockType) {
+  const bundle = {
+    _funcmsVersion: 1,
+    slug: bt.slug,
+    label: bt.label,
+    description: bt.description ?? '',
+    source: bt.source,
+    fields: bt.fields,
+    exportedAt: new Date().toISOString(),
+  }
+  const json = JSON.stringify(bundle, null, 2)
+  const blob = new Blob([json], { type: 'application/json' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = `${bt.slug}.block.json`
+  a.click()
+  URL.revokeObjectURL(url)
+}
+
+// ─── Import ───────────────────────────────────────────────────────────────────
+
+const importInput = ref<HTMLInputElement | null>(null)
+const importing = ref(false)
+const importError = ref('')
+const importConflict = ref<{ slug: string; bundle: object } | null>(null)
+
+function triggerImport() {
+  importError.value = ''
+  importInput.value?.click()
+}
+
+async function onImportFile(event: Event) {
+  const file = (event.target as HTMLInputElement).files?.[0]
+  if (!file) return
+  ;(event.target as HTMLInputElement).value = ''
+
+  let bundle: Record<string, unknown>
+  try {
+    bundle = JSON.parse(await file.text())
+  } catch {
+    importError.value = 'Invalid JSON file'
+    return
+  }
+
+  if (!bundle.slug || !bundle.source) {
+    importError.value = 'File does not look like a valid block bundle'
+    return
+  }
+
+  await doImport(bundle, false)
+}
+
+async function doImport(bundle: object, overwrite: boolean) {
+  importing.value = true
+  importError.value = ''
+  try {
+    await $fetch('/api/block-types/import', {
+      method: 'POST',
+      body: { ...bundle, overwrite },
+    })
+    importConflict.value = null
+    await refresh()
+    await invalidateRegistry((bundle as { slug: string }).slug)
+  } catch (e: unknown) {
+    const status = (e as { status?: number })?.status
+    const msg = (e as { data?: { statusMessage?: string } })?.data?.statusMessage ?? 'Import failed'
+    if (status === 409) {
+      importConflict.value = { slug: (bundle as { slug: string }).slug, bundle }
+    } else {
+      importError.value = msg
+    }
+  } finally {
+    importing.value = false
+  }
+}
+
 const defaultSource = `<template>
   <div class="px-6 py-8 mx-auto max-w-4xl">
     <h2 v-if="title" class="text-2xl font-bold mb-4">{{ title }}</h2>
@@ -131,14 +210,35 @@ async function deleteBlock(id: string) {
         <h1 class="text-2xl font-bold">Custom Block Types</h1>
         <p class="text-sm text-gray-500 mt-1">Write Vue SFC components and make them available as blocks in the page editor.</p>
       </div>
-      <button
-        @click="openNew"
-        class="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition"
-      >
-        <svg class="w-4 h-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"><path d="M10.75 4.75a.75.75 0 0 0-1.5 0v4.5h-4.5a.75.75 0 0 0 0 1.5h4.5v4.5a.75.75 0 0 0 1.5 0v-4.5h4.5a.75.75 0 0 0 0-1.5h-4.5v-4.5Z"/></svg>
-        New Block Type
-      </button>
+      <div class="flex items-center gap-2">
+        <!-- Hidden file input for import -->
+        <input
+          ref="importInput"
+          type="file"
+          accept=".json,.block.json"
+          class="hidden"
+          @change="onImportFile"
+        />
+        <button
+          @click="triggerImport"
+          :disabled="importing"
+          class="flex items-center gap-2 border dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700 px-4 py-2 rounded-lg text-sm font-medium transition disabled:opacity-50"
+        >
+          <svg class="w-4 h-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"><path d="M9.25 13.25a.75.75 0 0 0 1.5 0V4.636l2.955 3.129a.75.75 0 0 0 1.09-1.03l-4.25-4.5a.75.75 0 0 0-1.09 0l-4.25 4.5a.75.75 0 1 0 1.09 1.03L9.25 4.636v8.614Z"/><path d="M3.5 12.75a.75.75 0 0 0-1.5 0v2.5A2.75 2.75 0 0 0 4.75 18h10.5A2.75 2.75 0 0 0 18 15.25v-2.5a.75.75 0 0 0-1.5 0v2.5c0 .69-.56 1.25-1.25 1.25H4.75c-.69 0-1.25-.56-1.25-1.25v-2.5Z"/></svg>
+          {{ importing ? 'Importing…' : 'Import' }}
+        </button>
+        <button
+          @click="openNew"
+          class="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition"
+        >
+          <svg class="w-4 h-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"><path d="M10.75 4.75a.75.75 0 0 0-1.5 0v4.5h-4.5a.75.75 0 0 0 0 1.5h4.5v4.5a.75.75 0 0 0 1.5 0v-4.5h4.5a.75.75 0 0 0 0-1.5h-4.5v-4.5Z"/></svg>
+          New Block Type
+        </button>
+      </div>
     </div>
+
+    <!-- Import error -->
+    <p v-if="importError" class="mb-4 text-sm text-red-500 bg-red-50 dark:bg-red-900/20 rounded-lg px-3 py-2">{{ importError }}</p>
 
     <!-- Block type list -->
     <div v-if="blockTypes.length === 0" class="text-center py-16 text-gray-400">
@@ -165,11 +265,30 @@ async function deleteBlock(id: string) {
           <p class="text-xs text-gray-400 mt-0.5">{{ bt.fields.length }} field{{ bt.fields.length !== 1 ? 's' : '' }} · updated {{ bt.updatedAt ? new Date(bt.updatedAt).toLocaleDateString() : '—' }}</p>
         </div>
         <div class="flex items-center gap-2 shrink-0">
+          <button @click="exportBlock(bt)" title="Export as .block.json" class="px-3 py-1.5 text-sm border dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition flex items-center gap-1.5">
+            <svg class="w-3.5 h-3.5" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"><path d="M10.75 2.75a.75.75 0 0 0-1.5 0v8.614L6.295 8.235a.75.75 0 1 0-1.09 1.03l4.25 4.5a.75.75 0 0 0 1.09 0l4.25-4.5a.75.75 0 0 0-1.09-1.03l-2.955 3.129V2.75Z"/><path d="M3.5 12.75a.75.75 0 0 0-1.5 0v2.5A2.75 2.75 0 0 0 4.75 18h10.5A2.75 2.75 0 0 0 18 15.25v-2.5a.75.75 0 0 0-1.5 0v2.5c0 .69-.56 1.25-1.25 1.25H4.75c-.69 0-1.25-.56-1.25-1.25v-2.5Z"/></svg>
+            Export
+          </button>
           <button @click="openEdit(bt)" class="px-3 py-1.5 text-sm border dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition">Edit</button>
           <button
             @click="deleteConfirm = bt._id ?? null"
             class="px-3 py-1.5 text-sm border border-red-200 dark:border-red-800 text-red-600 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20 transition"
           >Delete</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Import conflict modal -->
+    <div v-if="importConflict" class="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4">
+      <div class="bg-white dark:bg-gray-800 rounded-xl shadow-xl p-6 max-w-sm w-full">
+        <h3 class="font-bold text-lg mb-2">Block already exists</h3>
+        <p class="text-sm text-gray-500 mb-4">
+          A block type with slug <code class="bg-gray-100 dark:bg-gray-700 px-1 rounded">{{ importConflict.slug }}</code> already exists.
+          Do you want to overwrite it with the imported version?
+        </p>
+        <div class="flex gap-3 justify-end">
+          <button @click="importConflict = null" class="px-4 py-2 text-sm border dark:border-gray-600 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700">Cancel</button>
+          <button @click="doImport(importConflict.bundle, true)" class="px-4 py-2 text-sm bg-amber-600 hover:bg-amber-700 text-white rounded-lg">Overwrite</button>
         </div>
       </div>
     </div>
