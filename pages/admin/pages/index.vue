@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { Page } from '~/types'
+import type { Page, SiteSettings, Locale } from '~/types'
 
 definePageMeta({ layout: 'admin', middleware: 'admin-auth' })
 
@@ -30,6 +30,16 @@ const { data, refresh } = await useFetch<{
 const pages = computed(() => data.value?.data ?? [])
 const total = computed(() => data.value?.total ?? 0)
 const totalPages = computed(() => data.value?.totalPages ?? 1)
+
+// ─── Site settings (for locale list) ─────────────────────────────────────────
+
+const { data: settingsData } = await useFetch<{ data: SiteSettings }>('/api/settings', {
+  headers,
+  credentials: 'include',
+})
+const locales = computed<Locale[]>(() => settingsData.value?.data?.locales ?? [])
+
+// ─── Create page ──────────────────────────────────────────────────────────────
 
 const creating = ref(false)
 const newTitle = ref('')
@@ -68,6 +78,58 @@ async function deletePage(id: string, title: string) {
   if (!confirm(`Delete "${title}"? This cannot be undone.`)) return
   await $fetch(`/api/pages/${id}`, { method: 'DELETE' })
   await refresh()
+}
+
+async function deleteVariant(pageId: string, locale: string, pageTitle: string) {
+  if (!confirm(`Remove the "${locale}" variant of "${pageTitle}"? This cannot be undone.`)) return
+  await $fetch(`/api/pages/${pageId}/clone`, { method: 'DELETE', body: { targetLocale: locale } })
+  await refresh()
+}
+
+// ─── Clone to locale ──────────────────────────────────────────────────────────
+
+const cloneTarget = ref<Page | null>(null)
+const cloneLocale = ref('')
+const cloneCopyContent = ref(true)
+const cloning = ref(false)
+const cloneError = ref('')
+
+const availableCloneLocales = computed(() => {
+  if (!cloneTarget.value) return locales.value
+  const existing = Object.keys(cloneTarget.value.locales ?? {})
+  return locales.value.filter(l => !existing.includes(l.code))
+})
+
+function openClone(p: Page) {
+  cloneTarget.value = p
+  cloneError.value = ''
+  const available = locales.value.filter(l => !Object.keys(p.locales ?? {}).includes(l.code))
+  cloneLocale.value = available.find(l => !l.default)?.code ?? available[0]?.code ?? ''
+  cloneCopyContent.value = true
+}
+
+function closeClone() {
+  cloneTarget.value = null
+}
+
+async function doClone() {
+  if (!cloneTarget.value || !cloneLocale.value) return
+  cloning.value = true
+  cloneError.value = ''
+  try {
+    await $fetch<{ data: Page }>(`/api/pages/${cloneTarget.value._id}/clone`, {
+      method: 'POST',
+      body: { targetLocale: cloneLocale.value, copyContent: cloneCopyContent.value },
+    })
+    const targetId = cloneTarget.value._id
+    closeClone()
+    await refresh()
+    await navigateTo(`/admin/pages/${targetId}`)
+  } catch (e: unknown) {
+    cloneError.value = (e as { data?: { statusMessage?: string } })?.data?.statusMessage ?? 'Clone failed'
+  } finally {
+    cloning.value = false
+  }
 }
 
 const statusColors: Record<string, string> = {
@@ -126,7 +188,28 @@ const statusColors: Record<string, string> = {
         </thead>
         <tbody>
           <tr v-for="p in pages" :key="p._id" class="border-t dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-750">
-            <td class="px-4 py-3 font-medium text-gray-900 dark:text-white">{{ p.title }}</td>
+            <td class="px-4 py-3">
+              <div class="font-medium text-gray-900 dark:text-white">{{ p.title }}</div>
+              <div v-if="p.locales && Object.keys(p.locales).length > 0" class="flex flex-wrap gap-1 mt-1">
+                <span
+                  v-for="(variant, code) in p.locales"
+                  :key="code"
+                  :class="[
+                    'inline-flex items-center gap-0.5 pl-1.5 pr-0.5 py-0.5 rounded text-[10px] font-medium',
+                    variant.status === 'published'
+                      ? 'bg-green-50 dark:bg-green-900/30 text-green-700 dark:text-green-400'
+                      : 'bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400'
+                  ]"
+                >
+                  <NuxtLink :to="`/admin/pages/${p._id}`" :title="`Edit ${code} variant (${variant.status})`">{{ code }}</NuxtLink>
+                  <button
+                    @click.stop="deleteVariant(p._id!, String(code), p.title)"
+                    :title="`Remove ${code} variant`"
+                    class="opacity-50 hover:opacity-100 hover:text-red-500 transition leading-none px-0.5"
+                  >×</button>
+                </span>
+              </div>
+            </td>
             <td class="px-4 py-3 text-gray-500 font-mono text-xs">{{ p.slug }}</td>
             <td class="px-4 py-3">
               <span :class="['px-2 py-0.5 rounded-full text-xs font-medium', statusColors[p.status] ?? 'bg-gray-100 text-gray-500']">
@@ -139,6 +222,14 @@ const statusColors: Record<string, string> = {
             <td class="px-4 py-3 flex items-center gap-3">
               <NuxtLink :to="`/admin/pages/${p._id}`" class="text-indigo-600 hover:underline text-xs font-medium">Edit</NuxtLink>
               <a :href="p.slug" target="_blank" class="text-gray-400 hover:text-gray-600 text-xs">View</a>
+              <button
+                v-if="locales.length > 0"
+                @click="openClone(p)"
+                title="Clone to locale"
+                class="text-gray-300 hover:text-indigo-500 transition"
+              >
+                <svg class="w-4 h-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"><path d="M7 3.5A1.5 1.5 0 0 1 8.5 2h3.879a1.5 1.5 0 0 1 1.06.44l3.122 3.12A1.5 1.5 0 0 1 17 6.622V12.5a1.5 1.5 0 0 1-1.5 1.5h-1v-3.379a3 3 0 0 0-.879-2.121L10.5 5.379A3 3 0 0 0 8.379 4.5H7v-1Z"/><path d="M4.5 6A1.5 1.5 0 0 0 3 7.5v9A1.5 1.5 0 0 0 4.5 18h7a1.5 1.5 0 0 0 1.5-1.5v-5.879a1.5 1.5 0 0 0-.44-1.06L9.44 6.439A1.5 1.5 0 0 0 8.378 6H4.5Z"/></svg>
+              </button>
               <button @click="deletePage(p._id!, p.title)" class="text-gray-300 hover:text-red-500 transition">
                 <svg class="w-4 h-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M8.75 1A2.75 2.75 0 0 0 6 3.75v.443c-.795.077-1.584.176-2.365.298a.75.75 0 1 0 .23 1.482l.149-.022.841 10.518A2.75 2.75 0 0 0 7.596 19h4.807a2.75 2.75 0 0 0 2.742-2.53l.841-10.52.149.023a.75.75 0 0 0 .23-1.482A41.03 41.03 0 0 0 14 4.193V3.75A2.75 2.75 0 0 0 11.25 1h-2.5ZM10 4c.84 0 1.673.025 2.5.075V3.75c0-.69-.56-1.25-1.25-1.25h-2.5c-.69 0-1.25.56-1.25 1.25v.325C8.327 4.025 9.16 4 10 4ZM8.58 7.72a.75.75 0 0 0-1.5.06l.3 7.5a.75.75 0 1 0 1.5-.06l-.3-7.5Zm4.34.06a.75.75 0 1 0-1.5-.06l-.3 7.5a.75.75 0 1 0 1.5.06l.3-7.5Z" clip-rule="evenodd"/></svg>
               </button>
@@ -156,6 +247,51 @@ const statusColors: Record<string, string> = {
       <button :disabled="page <= 1" @click="page--" class="px-3 py-1.5 border rounded-lg disabled:opacity-40 hover:bg-gray-50 transition">Previous</button>
       <span class="text-gray-500">Page {{ page }} of {{ totalPages }}</span>
       <button :disabled="page >= totalPages" @click="page++" class="px-3 py-1.5 border rounded-lg disabled:opacity-40 hover:bg-gray-50 transition">Next</button>
+    </div>
+
+    <!-- Clone to locale modal -->
+    <div v-if="cloneTarget" class="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4">
+      <div class="bg-white dark:bg-gray-800 rounded-2xl shadow-xl w-full max-w-md p-6">
+        <h2 class="text-lg font-bold mb-1">Clone to locale</h2>
+        <p class="text-sm text-gray-500 dark:text-gray-400 mb-4">
+          Creates a copy of <strong>{{ cloneTarget.title }}</strong> with a locale prefix on the slug.
+        </p>
+        <div class="space-y-4">
+          <div v-if="availableCloneLocales.length === 0" class="text-sm text-gray-500 dark:text-gray-400 bg-gray-50 dark:bg-gray-700 rounded-lg px-3 py-3 text-center">
+            This page has already been cloned to all configured locales.
+          </div>
+          <template v-else>
+            <div>
+              <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Target locale</label>
+              <select
+                v-model="cloneLocale"
+                class="w-full border rounded-lg px-3 py-2 text-sm dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+              >
+                <option v-for="l in availableCloneLocales" :key="l.code" :value="l.code">{{ l.label }} ({{ l.code }})</option>
+              </select>
+            </div>
+            <div v-if="cloneLocale" class="text-xs text-gray-500 dark:text-gray-400 bg-gray-50 dark:bg-gray-700 rounded-lg px-3 py-2">
+              Public URL: <span class="font-mono">/{{ cloneLocale }}{{ cloneTarget.slug }}</span>
+            </div>
+          </template>
+          <label class="flex items-center gap-2 cursor-pointer">
+            <input type="checkbox" v-model="cloneCopyContent" class="rounded" />
+            <span class="text-sm text-gray-700 dark:text-gray-300">Copy blocks and content</span>
+          </label>
+          <p v-if="cloneError" class="text-red-500 text-sm">{{ cloneError }}</p>
+          <div class="flex gap-3 justify-end pt-2">
+            <button type="button" @click="closeClone" class="px-4 py-2 text-sm text-gray-600 hover:text-gray-800">Cancel</button>
+            <button
+              v-if="availableCloneLocales.length > 0"
+              @click="doClone"
+              :disabled="cloning || !cloneLocale"
+              class="px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 disabled:opacity-50"
+            >
+              {{ cloning ? 'Cloning…' : 'Clone page' }}
+            </button>
+          </div>
+        </div>
+      </div>
     </div>
 
     <!-- Create modal -->

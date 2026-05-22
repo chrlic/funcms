@@ -3,13 +3,14 @@ import { requireAuth } from '~/server/lib/auth'
 import type { Page } from '~/types'
 
 export default defineEventHandler(async (event) => {
-  const { slug, preview, sid } = getQuery(event)
+  const { slug, locale, preview, sid } = getQuery(event)
 
   if (!slug || typeof slug !== 'string') {
     throw createError({ statusCode: 400, statusMessage: 'slug query param required' })
   }
 
   const normalizedSlug = slug.startsWith('/') ? slug : `/${slug}`
+  const localeCode = typeof locale === 'string' ? locale : ''
 
   const isPreview = preview === '1' || preview === 'true'
   if (isPreview) {
@@ -20,19 +21,44 @@ export default defineEventHandler(async (event) => {
 
   const store = useGitStore()
 
-  // If a session id is provided with preview, scan the worktree for the page
+  let page: Page | null = null
+
   if (isPreview && sid && typeof sid === 'string') {
     const sessionPages = await store.sessionFind<Page>(sid, COLLECTION.PAGES, (r) => r.slug === normalizedSlug)
-    if (sessionPages.length > 0) return { data: sessionPages[0] }
+    if (sessionPages.length > 0) page = sessionPages[0]
   }
 
-  const page = await store.findOne<Page>(
-    COLLECTION.PAGES,
-    (r) => r.slug === normalizedSlug && (isPreview ? true : r.status === 'published')
-  )
-
   if (!page) {
-    throw createError({ statusCode: 404, statusMessage: 'Page not found' })
+    page = await store.findOne<Page>(
+      COLLECTION.PAGES,
+      (r) => {
+        if (r.slug !== normalizedSlug) return false
+        if (isPreview) return true
+        // For locale-specific requests, check that variant is published
+        if (localeCode) {
+          const variant = (r as Page).locales?.[localeCode]
+          return variant ? variant.status === 'published' : r.status === 'published'
+        }
+        return r.status === 'published'
+      }
+    )
+  }
+
+  if (!page) throw createError({ statusCode: 404, statusMessage: 'Page not found' })
+
+  // Merge locale variant fields over root fields so the renderer gets a flat Page
+  if (localeCode && page.locales?.[localeCode]) {
+    const variant = page.locales[localeCode]
+    return {
+      data: {
+        ...page,
+        title: variant.title,
+        meta: variant.meta,
+        blocks: variant.blocks,
+        status: variant.status,
+        // Keep layout/style/layoutOptions from root (shared)
+      }
+    }
   }
 
   return { data: page }

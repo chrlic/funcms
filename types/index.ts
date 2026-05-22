@@ -83,16 +83,24 @@ export interface PageLayoutOptions {
   sidebarWidth?: number  // percentage 10–50, only used by sidebar-left / sidebar-right
 }
 
-export interface Page {
-  _id?: string
-  slug: string           // e.g. "/about/team" — leading slash included
+export interface LocaleVariant {
   title: string
-  layout: LayoutType
-  layoutOptions?: PageLayoutOptions
-  style?: PageStyle
-  status: PageStatus
   meta: PageMeta
   blocks: Block[]
+  status: PageStatus
+}
+
+export interface Page {
+  _id?: string
+  slug: string           // canonical slug, no locale prefix, e.g. "/about/team"
+  title: string          // default locale title (fallback)
+  layout: LayoutType     // shared across all locales
+  layoutOptions?: PageLayoutOptions
+  style?: PageStyle
+  status: PageStatus     // default locale status (fallback)
+  meta: PageMeta         // default locale meta (fallback)
+  blocks: Block[]        // default locale blocks (fallback)
+  locales?: Record<string, LocaleVariant>  // locale code → variant; absence = use root fields
   createdAt?: string
   updatedAt?: string
   createdBy?: string
@@ -165,6 +173,12 @@ export interface SiteTypography {
   dark?: ThemeTokens
 }
 
+export interface Locale {
+  code: string       // e.g. 'en', 'cs', 'en-us'
+  label: string      // e.g. 'English', 'Česky'
+  default?: boolean  // exactly one locale should be default
+}
+
 export interface SiteSettings {
   siteName: string
   tagline?: string
@@ -172,11 +186,13 @@ export interface SiteSettings {
   favicon?: string
   navStyle?: NavStyle
   nav: NavItem[]
+  navLocales?: Record<string, NavItem[]>  // per-locale nav overrides; key = locale code
   footer: NavItem[]
   socialLinks: Record<string, string>
   customCss?: string
   headScripts?: string
   typography?: SiteTypography
+  locales?: Locale[]                       // configured locales; empty = no i18n
 }
 
 // ─── API Responses ─────────────────────────────────────────────────────────────

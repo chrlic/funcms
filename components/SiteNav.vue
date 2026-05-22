@@ -79,7 +79,8 @@ function navLinkProps(item: NavItem) {
         </div>
       </nav>
 
-      <div class="hidden md:flex items-center">
+      <div class="hidden md:flex items-center gap-2">
+        <LanguageSelector />
         <ThemeToggle />
       </div>
 
@@ -112,7 +113,8 @@ function navLinkProps(item: NavItem) {
           </component>
         </template>
       </template>
-      <div class="pt-2 pb-1 flex justify-start px-3">
+      <div class="pt-2 pb-1 flex items-center justify-start gap-3 px-3">
+        <LanguageSelector />
         <ThemeToggle />
       </div>
     </div>
@@ -180,8 +182,9 @@ function navLinkProps(item: NavItem) {
         </template>
       </nav>
 
-      <!-- Sidebar footer: theme toggle -->
-      <div class="shrink-0 border-t dark:border-gray-700 px-3 py-2 flex items-center" :class="sidebarOpen ? 'justify-start' : 'justify-center'">
+      <!-- Sidebar footer: language selector + theme toggle -->
+      <div class="shrink-0 border-t dark:border-gray-700 px-3 py-2 flex items-center gap-2" :class="sidebarOpen ? 'justify-start' : 'justify-center'">
+        <LanguageSelector v-if="sidebarOpen" />
         <ThemeToggle />
       </div>
     </aside>
@@ -211,7 +214,8 @@ function navLinkProps(item: NavItem) {
             </template>
           </template>
         </nav>
-        <div class="shrink-0 border-t dark:border-gray-700 px-4 py-3">
+        <div class="shrink-0 border-t dark:border-gray-700 px-4 py-3 flex items-center gap-3">
+          <LanguageSelector />
           <ThemeToggle />
         </div>
       </div>

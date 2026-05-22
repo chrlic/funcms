@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import draggable from 'vuedraggable'
-import type { Page, Block, BlockType, LayoutType } from '~/types'
+import type { Page, Block, BlockType, LayoutType, SiteSettings, Locale, LocaleVariant } from '~/types'
 import { pageCssHints } from '~/composables/useCssHints'
 import staticBlockRegistry from '~/components/blocks/index'
 import type { Component } from 'vue'
@@ -37,6 +37,43 @@ onMounted(loadPage)
 
 async function refresh() {
   await loadPage()
+}
+
+// ─── Locale tabs ──────────────────────────────────────────────────────────────
+
+const { data: settingsData } = await useFetch<{ data: SiteSettings }>('/api/settings')
+const siteLocales = computed<Locale[]>(() => settingsData.value?.data?.locales ?? [])
+const defaultLocale = computed(() => siteLocales.value.find(l => l.default) ?? siteLocales.value[0])
+
+// '' = root/default variant; locale code = specific variant
+const activeLocale = ref('')
+
+// Computed that proxies locale-variant fields: reads from variant if active, root otherwise.
+// Writing goes to page.locales[activeLocale] or to root fields directly.
+const variant = computed<LocaleVariant>({
+  get() {
+    if (!page.value) return { title: '', meta: { title: '' }, blocks: [], status: 'draft' }
+    if (activeLocale.value && page.value.locales?.[activeLocale.value]) {
+      return page.value.locales[activeLocale.value]
+    }
+    return { title: page.value.title, meta: page.value.meta, blocks: page.value.blocks, status: page.value.status }
+  },
+  set(v: LocaleVariant) {
+    if (!page.value) return
+    if (activeLocale.value) {
+      page.value = {
+        ...page.value,
+        locales: { ...(page.value.locales ?? {}), [activeLocale.value]: v },
+      }
+    } else {
+      page.value = { ...page.value, title: v.title, meta: v.meta, blocks: v.blocks, status: v.status }
+    }
+    isDirty.value = true
+  },
+})
+
+function setVariantField<K extends keyof LocaleVariant>(key: K, value: LocaleVariant[K]) {
+  variant.value = { ...variant.value, [key]: value }
 }
 
 // ─── Session guard ────────────────────────────────────────────────────────────
@@ -111,7 +148,7 @@ const showBgPicker = ref(false)
 
 function addBlock(type: BlockType) {
   if (!page.value) return
-  const existing = page.value.blocks ?? []
+  const existing = variant.value.blocks ?? []
   const maxOrder = existing.filter(b => b.slot === addBlockSlot.value).reduce((m, b) => Math.max(m, b.order), -1)
   const newBlock: Block = {
     id: crypto.randomUUID(),
@@ -121,33 +158,29 @@ function addBlock(type: BlockType) {
     visible: true,
     props: {},
   }
-  page.value = { ...page.value, blocks: [...existing, newBlock] }
+  setVariantField('blocks', [...existing, newBlock])
   showAddBlock.value = false
-  isDirty.value = true
 }
 
 function updateBlock(index: number, updated: Block) {
   if (!page.value) return
-  const blocks = [...(page.value.blocks ?? [])]
+  const blocks = [...(variant.value.blocks ?? [])]
   blocks[index] = updated
-  page.value = { ...page.value, blocks }
-  isDirty.value = true
+  setVariantField('blocks', blocks)
 }
 
 function removeBlock(index: number) {
   if (!page.value) return
   if (!confirm('Remove this block?')) return
-  const blocks = [...(page.value.blocks ?? [])]
+  const blocks = [...(variant.value.blocks ?? [])]
   blocks.splice(index, 1)
-  page.value = { ...page.value, blocks }
-  isDirty.value = true
+  setVariantField('blocks', blocks)
 }
 
 function moveBlock(index: number, direction: 'up' | 'down') {
   if (!page.value) return
-  const blocks = [...(page.value.blocks ?? [])]
+  const blocks = [...(variant.value.blocks ?? [])]
   const block = blocks[index]
-  // Find adjacent block in same slot
   const sameSlot = blocks.filter(b => b.slot === block.slot).sort((a, b) => a.order - b.order)
   const pos = sameSlot.indexOf(block)
   const targetPos = direction === 'up' ? pos - 1 : pos + 1
@@ -156,30 +189,23 @@ function moveBlock(index: number, direction: 'up' | 'down') {
   const tempOrder = block.order
   block.order = target.order
   target.order = tempOrder
-  page.value.blocks = [...blocks]
+  setVariantField('blocks', [...blocks])
 }
 
 const sortedBlocks = computed(() => {
-  if (!page.value) return []
-  return [...(page.value.blocks ?? [])].sort((a, b) => {
+  return [...(variant.value.blocks ?? [])].sort((a, b) => {
     if (a.slot !== b.slot) return a.slot.localeCompare(b.slot)
     return a.order - b.order
   })
 })
 
-// draggableBlocks is the writable array vuedraggable binds to.
-// Reading returns sortedBlocks; writing after a drag reorders via order fields.
 const draggableBlocks = computed({
   get: () => sortedBlocks.value,
   set: (reordered: Block[]) => {
     if (!page.value) return
     const updated = reordered.map((b, i) => ({ ...b, order: i }))
-    // Merge back into page.value.blocks preserving any slot separation
-    const others = (page.value.blocks ?? []).filter(
-      b => !reordered.find(r => r.id === b.id)
-    )
-    page.value = { ...page.value, blocks: [...updated, ...others] }
-    isDirty.value = true
+    const others = (variant.value.blocks ?? []).filter(b => !reordered.find(r => r.id === b.id))
+    setVariantField('blocks', [...updated, ...others])
   },
 })
 
@@ -257,6 +283,67 @@ async function restoreVersion() {
 function formatDate(iso: string) {
   return new Date(iso).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })
 }
+
+// ─── Clone to locale ──────────────────────────────────────────────────────────
+
+const locales = siteLocales  // alias — siteLocales already fetched above
+
+const showClone = ref(false)
+const cloneLocale = ref('')
+const cloneCopyContent = ref(true)
+const cloning = ref(false)
+const cloneError = ref('')
+
+const availableCloneLocales = computed(() => {
+  const existing = Object.keys(page.value?.locales ?? {})
+  return locales.value.filter(l => !existing.includes(l.code))
+})
+
+function openClone() {
+  showClone.value = true
+  cloneError.value = ''
+  cloneLocale.value = availableCloneLocales.value.find(l => !l.default)?.code ?? availableCloneLocales.value[0]?.code ?? ''
+  cloneCopyContent.value = true
+}
+
+async function doClone() {
+  if (!cloneLocale.value) return
+  cloning.value = true
+  cloneError.value = ''
+  try {
+    const result = await $fetch<{ data: Page }>(`/api/pages/${id}/clone`, {
+      method: 'POST',
+      body: { targetLocale: cloneLocale.value, copyContent: cloneCopyContent.value },
+    })
+    page.value = { ...result.data, blocks: result.data.blocks ?? [] }
+    activeLocale.value = cloneLocale.value
+    showClone.value = false
+  } catch (e: unknown) {
+    cloneError.value = (e as { data?: { statusMessage?: string } })?.data?.statusMessage ?? 'Clone failed'
+  } finally {
+    cloning.value = false
+  }
+}
+
+async function removeVariant(code: string) {
+  if (!confirm(`Remove the "${siteLocales.value.find(l => l.code === code)?.label ?? code}" variant? This cannot be undone.`)) return
+  try {
+    const result = await sfetch<{ data: Page }>(`/api/pages/${id}/clone`, {
+      method: 'DELETE',
+      body: { targetLocale: code },
+    })
+    page.value = { ...result.data, blocks: result.data.blocks ?? [] }
+    if (activeLocale.value === code) activeLocale.value = ''
+  } catch (e: unknown) {
+    cloneError.value = (e as { data?: { statusMessage?: string } })?.data?.statusMessage ?? 'Remove failed'
+  }
+}
+
+function clonePreviewSlug() {
+  if (!page.value || !cloneLocale.value) return ''
+  const stripped = page.value.slug.replace(/^\/[a-z]{2}(?:-[a-zA-Z]{2,4})?\//i, '/')
+  return `/${cloneLocale.value}${stripped}`
+}
 </script>
 
 <template>
@@ -283,6 +370,10 @@ function formatDate(iso: string) {
           <svg class="w-4 h-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M10 18a8 8 0 1 0 0-16 8 8 0 0 0 0 16Zm.75-13a.75.75 0 0 0-1.5 0v5c0 .414.336.75.75.75h4a.75.75 0 0 0 0-1.5h-3.25V5Z" clip-rule="evenodd"/></svg>
           History
         </button>
+        <button v-if="locales.length > 0" @click="openClone" class="text-sm text-gray-500 hover:text-indigo-600 flex items-center gap-1" title="Clone to locale">
+          <svg class="w-4 h-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"><path d="M7 3.5A1.5 1.5 0 0 1 8.5 2h3.879a1.5 1.5 0 0 1 1.06.44l3.122 3.12A1.5 1.5 0 0 1 17 6.622V12.5a1.5 1.5 0 0 1-1.5 1.5h-1v-3.379a3 3 0 0 0-.879-2.121L10.5 5.379A3 3 0 0 0 8.379 4.5H7v-1Z"/><path d="M4.5 6A1.5 1.5 0 0 0 3 7.5v9A1.5 1.5 0 0 0 4.5 18h7a1.5 1.5 0 0 0 1.5-1.5v-5.879a1.5 1.5 0 0 0-.44-1.06L9.44 6.439A1.5 1.5 0 0 0 8.378 6H4.5Z"/></svg>
+          Clone to locale
+        </button>
         <button
           @click="save"
           :disabled="saving"
@@ -297,6 +388,42 @@ function formatDate(iso: string) {
     </div>
 
     <p v-if="saveError" class="mb-4 text-red-500 text-sm">{{ saveError }}</p>
+
+    <!-- Locale tabs -->
+    <div v-if="siteLocales.length > 0" class="flex items-center gap-1 mb-5 border-b dark:border-gray-700">
+      <!-- Default / root tab -->
+      <button
+        @click="activeLocale = ''"
+        :class="[
+          'px-4 py-2 text-sm font-medium border-b-2 -mb-px transition',
+          activeLocale === ''
+            ? 'border-indigo-600 text-indigo-600 dark:text-indigo-400'
+            : 'border-transparent text-gray-500 hover:text-gray-900 dark:hover:text-white'
+        ]"
+      >
+        {{ defaultLocale?.label ?? 'Default' }}
+        <span :class="['ml-1.5 text-xs px-1.5 py-0.5 rounded-full', page.status === 'published' ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700']">
+          {{ page.status }}
+        </span>
+      </button>
+      <!-- Variant tabs -->
+      <button
+        v-for="(v, code) in (page.locales ?? {})"
+        :key="code"
+        @click="activeLocale = code"
+        :class="[
+          'px-4 py-2 text-sm font-medium border-b-2 -mb-px transition',
+          activeLocale === code
+            ? 'border-indigo-600 text-indigo-600 dark:text-indigo-400'
+            : 'border-transparent text-gray-500 hover:text-gray-900 dark:hover:text-white'
+        ]"
+      >
+        {{ siteLocales.find(l => l.code === code)?.label ?? code }}
+        <span :class="['ml-1.5 text-xs px-1.5 py-0.5 rounded-full', v.status === 'published' ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700']">
+          {{ v.status }}
+        </span>
+      </button>
+    </div>
 
     <div class="grid grid-cols-3 gap-6">
       <!-- Left: blocks -->
@@ -329,10 +456,10 @@ function formatDate(iso: string) {
             <BlockEditor
               :key="block.id"
               :block="block"
-              @update="(b) => updateBlock(page!.blocks.indexOf(block), b)"
-              @remove="removeBlock(page!.blocks.indexOf(block))"
-              @move-up="moveBlock(page!.blocks.indexOf(block), 'up')"
-              @move-down="moveBlock(page!.blocks.indexOf(block), 'down')"
+              @update="(b) => updateBlock(variant.blocks.indexOf(block), b)"
+              @remove="removeBlock(variant.blocks.indexOf(block))"
+              @move-up="moveBlock(variant.blocks.indexOf(block), 'up')"
+              @move-down="moveBlock(variant.blocks.indexOf(block), 'down')"
             />
           </template>
         </draggable>
@@ -345,22 +472,30 @@ function formatDate(iso: string) {
 
           <div>
             <label class="block text-xs font-medium text-gray-500 mb-1">Title</label>
-            <input v-model="page.title" class="w-full border rounded-lg px-3 py-2 text-sm dark:bg-gray-700 dark:border-gray-600 dark:text-white" />
+            <input
+              :value="variant.title"
+              @input="setVariantField('title', ($event.target as HTMLInputElement).value)"
+              class="w-full border rounded-lg px-3 py-2 text-sm dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+            />
           </div>
 
           <div>
-            <label class="block text-xs font-medium text-gray-500 mb-1">Slug</label>
-            <input v-model="page.slug" class="w-full border rounded-lg px-3 py-2 text-sm font-mono dark:bg-gray-700 dark:border-gray-600 dark:text-white" />
+            <label class="block text-xs font-medium text-gray-500 mb-1">Slug <span class="text-gray-400 font-normal">(shared)</span></label>
+            <input v-model="page.slug" @input="isDirty = true" class="w-full border rounded-lg px-3 py-2 text-sm font-mono dark:bg-gray-700 dark:border-gray-600 dark:text-white" />
           </div>
 
           <div>
             <label class="block text-xs font-medium text-gray-500 mb-1">Status</label>
-            <select v-model="page.status" :class="[
-              'w-full border rounded-lg px-3 py-2 text-sm font-medium dark:border-gray-600',
-              page.status === 'published' ? 'bg-green-50 text-green-800 border-green-200 dark:bg-green-900/20 dark:text-green-300' :
-              page.status === 'draft'     ? 'bg-yellow-50 text-yellow-800 border-yellow-200 dark:bg-yellow-900/20 dark:text-yellow-300' :
-                                           'bg-gray-100 text-gray-500 dark:bg-gray-700 dark:text-gray-400'
-            ]">
+            <select
+              :value="variant.status"
+              @change="setVariantField('status', ($event.target as HTMLSelectElement).value as 'draft'|'published'|'archived')"
+              :class="[
+                'w-full border rounded-lg px-3 py-2 text-sm font-medium dark:border-gray-600',
+                variant.status === 'published' ? 'bg-green-50 text-green-800 border-green-200 dark:bg-green-900/20 dark:text-green-300' :
+                variant.status === 'draft'     ? 'bg-yellow-50 text-yellow-800 border-yellow-200 dark:bg-yellow-900/20 dark:text-yellow-300' :
+                                                 'bg-gray-100 text-gray-500 dark:bg-gray-700 dark:text-gray-400'
+              ]"
+            >
               <option value="draft">Draft — not visible on site</option>
               <option value="published">Published — live on site</option>
               <option value="archived">Archived</option>
@@ -396,16 +531,30 @@ function formatDate(iso: string) {
 
           <div>
             <label class="block text-xs font-medium text-gray-500 mb-1">Meta Title</label>
-            <input v-model="page.meta.title" class="w-full border rounded-lg px-3 py-2 text-sm dark:bg-gray-700 dark:border-gray-600 dark:text-white" />
+            <input
+              :value="variant.meta.title"
+              @input="setVariantField('meta', { ...variant.meta, title: ($event.target as HTMLInputElement).value })"
+              class="w-full border rounded-lg px-3 py-2 text-sm dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+            />
           </div>
 
           <div>
             <label class="block text-xs font-medium text-gray-500 mb-1">Meta Description</label>
-            <textarea v-model="page.meta.description" rows="3" class="w-full border rounded-lg px-3 py-2 text-sm dark:bg-gray-700 dark:border-gray-600 dark:text-white resize-none" />
+            <textarea
+              :value="variant.meta.description"
+              @input="setVariantField('meta', { ...variant.meta, description: ($event.target as HTMLTextAreaElement).value })"
+              rows="3"
+              class="w-full border rounded-lg px-3 py-2 text-sm dark:bg-gray-700 dark:border-gray-600 dark:text-white resize-none"
+            />
           </div>
 
           <label class="flex items-center gap-2 cursor-pointer">
-            <input type="checkbox" v-model="page.meta.noIndex" class="rounded" />
+            <input
+              type="checkbox"
+              :checked="variant.meta.noIndex"
+              @change="setVariantField('meta', { ...variant.meta, noIndex: ($event.target as HTMLInputElement).checked })"
+              class="rounded"
+            />
             <span class="text-sm text-gray-700 dark:text-gray-300">No-index (hide from search engines)</span>
           </label>
         </div>
@@ -663,6 +812,64 @@ function formatDate(iso: string) {
             <svg v-else class="w-4 h-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M7.793 2.232a.75.75 0 0 1-.025 1.06L3.622 7.25h10.003a5.375 5.375 0 0 1 0 10.75H10.75a.75.75 0 0 1 0-1.5h2.875a3.875 3.875 0 0 0 0-7.75H3.622l4.146 3.957a.75.75 0 0 1-1.036 1.085l-5.5-5.25a.75.75 0 0 1 0-1.085l5.5-5.25a.75.75 0 0 1 1.06.025Z" clip-rule="evenodd"/></svg>
             {{ restoring ? 'Restoring…' : 'Restore this version' }}
           </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Clone to locale modal -->
+    <div v-if="showClone" class="fixed inset-0 z-[60] bg-black/60 flex items-center justify-center p-4">
+      <div class="bg-white dark:bg-gray-800 rounded-2xl shadow-xl w-full max-w-md p-6">
+        <h2 class="text-lg font-bold mb-1">Clone to locale</h2>
+        <p class="text-sm text-gray-500 dark:text-gray-400 mb-4">
+          Creates a copy of this page as a draft with a locale-prefixed slug.
+        </p>
+        <div class="space-y-4">
+          <!-- Existing locale variants -->
+          <div v-if="page?.locales && Object.keys(page.locales).length > 0" class="flex flex-wrap gap-1.5 items-center">
+            <span class="text-xs text-gray-500 dark:text-gray-400">Existing variants:</span>
+            <span
+              v-for="(_, code) in page.locales"
+              :key="code"
+              class="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400"
+            >
+              {{ siteLocales.find(l => l.code === code)?.label ?? code }}
+              <button @click="removeVariant(code)" class="ml-0.5 hover:text-red-500 transition" title="Remove this variant">×</button>
+            </span>
+          </div>
+
+          <div v-if="availableCloneLocales.length === 0" class="text-sm text-gray-500 dark:text-gray-400 bg-gray-50 dark:bg-gray-700 rounded-lg px-3 py-3 text-center">
+            This page has already been cloned to all configured locales.
+          </div>
+          <template v-else>
+            <div>
+              <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Target locale</label>
+              <select
+                v-model="cloneLocale"
+                class="w-full border rounded-lg px-3 py-2 text-sm dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+              >
+                <option v-for="l in availableCloneLocales" :key="l.code" :value="l.code">{{ l.label }} ({{ l.code }})</option>
+              </select>
+            </div>
+            <div v-if="cloneLocale" class="text-xs text-gray-500 dark:text-gray-400 font-mono bg-gray-50 dark:bg-gray-700 rounded-lg px-3 py-2">
+              {{ page?.slug }} → {{ clonePreviewSlug() }}
+            </div>
+            <label class="flex items-center gap-2 cursor-pointer">
+              <input type="checkbox" v-model="cloneCopyContent" class="rounded" />
+              <span class="text-sm text-gray-700 dark:text-gray-300">Copy blocks and content</span>
+            </label>
+          </template>
+          <p v-if="cloneError" class="text-red-500 text-sm">{{ cloneError }}</p>
+          <div class="flex gap-3 justify-end pt-2">
+            <button type="button" @click="showClone = false" class="px-4 py-2 text-sm text-gray-600 hover:text-gray-800 dark:text-gray-400 dark:hover:text-gray-200">Cancel</button>
+            <button
+              v-if="availableCloneLocales.length > 0"
+              @click="doClone"
+              :disabled="cloning || !cloneLocale"
+              class="px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 disabled:opacity-50"
+            >
+              {{ cloning ? 'Cloning…' : 'Clone page' }}
+            </button>
+          </div>
         </div>
       </div>
     </div>

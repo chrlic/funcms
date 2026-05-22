@@ -31,18 +31,49 @@ const route = useRoute()
 const preview = route.query.preview === '1'
 const headers = preview ? useRequestHeaders(['cookie']) : {}
 
+// Detect locale prefix from path: /en/about → locale='en', slug='/about'
+const locales = computed(() => settingsData.value?.data?.locales ?? [])
+
+const { locale: currentLocale, bareSlug } = (() => {
+  const path = route.path
+  for (const l of (settingsData.value?.data?.locales ?? [])) {
+    const code = l.code.toLowerCase()
+    if (path.toLowerCase() === `/${code}` || path.toLowerCase().startsWith(`/${code}/`)) {
+      const stripped = path.slice(code.length + 1) || '/'
+      return { locale: l.code, bareSlug: stripped }
+    }
+  }
+  return { locale: '', bareSlug: path }
+})()
+
 const { data: pageData } = await useFetch<{ data: Page }>(
   '/api/pages/by-slug',
   {
     headers,
     credentials: preview ? 'include' : 'same-origin',
-    query: { slug: route.path, ...(preview ? { preview: '1' } : {}) },
+    query: {
+      slug: bareSlug,
+      ...(currentLocale ? { locale: currentLocale } : {}),
+      ...(preview ? { preview: '1' } : {}),
+      ...(preview && route.query.sid ? { sid: route.query.sid } : {}),
+    },
     key: `page-${route.path}-${preview}`,
     ignoreResponseError: true,
   }
 )
 
 const page = computed(() => pageData.value?.data ?? null)
+
+// Provide available locale codes to LanguageSelector (via inject)
+const pageAvailableLocales = computed<string[]>(() => {
+  if (!page.value) return []
+  const variantCodes = Object.entries(page.value.locales ?? {})
+    .filter(([, v]) => v.status === 'published')
+    .map(([code]) => code)
+  if (page.value.status === 'published') variantCodes.push('__default__')
+  return variantCodes
+})
+provide('pageAvailableLocales', pageAvailableLocales)
 
 const blocksBySlot = computed(() => {
   const slots: Record<string, Block[]> = {}
