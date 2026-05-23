@@ -139,11 +139,11 @@ export class GitStore {
     return next
   }
 
-  private async commit(message: string, files: string[]): Promise<void> {
+  private async commit(message: string, files: string[], author?: { name: string; email: string }): Promise<void> {
     await this.git.add(files)
-    await this.git.commit(message, { '--author': `${this.authorName} <${this.authorEmail}>` })
+    const a = author ?? { name: this.authorName, email: this.authorEmail }
+    await this.git.commit(message, { '--author': `${a.name} <${a.email}>` })
     if (this.gitRemote) {
-      // Fire-and-forget push; don't block the response
       this.git.push(this.gitRemote, 'HEAD').catch((e) =>
         console.warn('[GitStore] Push failed:', e)
       )
@@ -155,7 +155,8 @@ export class GitStore {
   async create<T extends object>(
     collection: string,
     data: T,
-    commitMsg?: string
+    commitMsg?: string,
+    author?: { name: string; email: string }
   ): Promise<StoreRecord & T> {
     const now = new Date().toISOString()
     const record: StoreRecord & T = {
@@ -170,7 +171,8 @@ export class GitStore {
       await fs.writeFile(this.recordPath(collection, record._id), JSON.stringify(record, null, 2))
       await this.commit(
         commitMsg ?? `feat(${collection}): create ${record._id}`,
-        [this.relPath(collection, record._id)]
+        [this.relPath(collection, record._id)],
+        author
       )
     })
 
@@ -233,7 +235,8 @@ export class GitStore {
     collection: string,
     id: string,
     patch: Partial<T>,
-    commitMsg?: string
+    commitMsg?: string,
+    author?: { name: string; email: string }
   ): Promise<(StoreRecord & T) | null> {
     const existing = this.getIndex(collection).get(id)
     if (!existing) return null
@@ -250,7 +253,8 @@ export class GitStore {
       await fs.writeFile(this.recordPath(collection, id), JSON.stringify(updated, null, 2))
       await this.commit(
         commitMsg ?? `feat(${collection}): update ${id}`,
-        [this.relPath(collection, id)]
+        [this.relPath(collection, id)],
+        author
       )
     })
 
@@ -258,7 +262,7 @@ export class GitStore {
     return updated as StoreRecord & T
   }
 
-  async delete(collection: string, id: string, commitMsg?: string): Promise<boolean> {
+  async delete(collection: string, id: string, commitMsg?: string, author?: { name: string; email: string }): Promise<boolean> {
     if (!this.getIndex(collection).has(id)) return false
 
     await this.withLock(collection, async () => {
@@ -267,7 +271,8 @@ export class GitStore {
       await this.git.rm([this.relPath(collection, id)])
       await this.commit(
         commitMsg ?? `feat(${collection}): delete ${id}`,
-        []  // already staged by git.rm
+        [],  // already staged by git.rm
+        author
       )
     })
 
@@ -314,11 +319,11 @@ export class GitStore {
     }))
   }
 
-  async revertToCommit(hash: string, commitMsg: string) {
-    // Hard-reset the working tree to the target commit, then recommit so history is preserved
+  async revertToCommit(hash: string, commitMsg: string, author?: { name: string; email: string }) {
     await this.git.checkout([hash, '--', '.'])
     await this.git.add(['.'])
-    await this.git.commit(commitMsg, { '--allow-empty': null })
+    const a = author ?? { name: this.authorName, email: this.authorEmail }
+    await this.git.commit(commitMsg, { '--allow-empty': null, '--author': `${a.name} <${a.email}>` })
     await this.buildAllIndexes()
   }
 }

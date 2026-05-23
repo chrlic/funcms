@@ -1,7 +1,7 @@
 import { useGitStore, COLLECTION } from '~/server/lib/store'
 import { compileCustomBlock } from '~/server/lib/custom-block-compiler'
 import { registerCustomBlock, listCustomBlockMeta } from '~/server/lib/custom-block-registry'
-import { requireAuth, requireRole } from '~/server/lib/auth'
+import { requireAuth, requireRole, userAuthor } from "~/server/lib/auth"
 import type { CustomBlockType } from '~/types'
 
 export default defineEventHandler(async (event) => {
@@ -18,8 +18,7 @@ export default defineEventHandler(async (event) => {
 
   // ─── POST /api/block-types ─────────────────────────────────────────────────
   if (method === 'POST') {
-    requireRole(event, 'admin')
-    const user = requireAuth(event)
+    const user = requireRole(event, 'admin')
 
     const body = await readBody<{
       slug: string
@@ -62,7 +61,7 @@ export default defineEventHandler(async (event) => {
       createdBy: user._id,
     }
 
-    const created = await store.create(COLLECTION.BLOCK_TYPES, record, `feat: add custom block type "${body.slug}"`)
+    const created = await store.create(COLLECTION.BLOCK_TYPES, record, `feat: add custom block type "${body.slug}"`, userAuthor(user))
 
     // Register in server-side registry immediately (no restart needed)
     registerCustomBlock(created as CustomBlockType)

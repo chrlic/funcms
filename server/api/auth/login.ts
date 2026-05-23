@@ -29,7 +29,7 @@ export default defineEventHandler(async (event) => {
   }
 
   const token = jwt.sign(
-    { userId: user._id, email: user.email, role: user.role },
+    { userId: user._id, email: user.email, role: user.role, name: user.name },
     config.jwtSecret,
     { expiresIn: config.jwtExpiresIn }
   )

@@ -1,5 +1,5 @@
 import { useGitStore, COLLECTION } from '~/server/lib/store'
-import { requireRole } from '~/server/lib/auth'
+import { requireRole, userAuthor } from '~/server/lib/auth'
 import type { MediaItem } from '~/types'
 import { promises as fs } from 'node:fs'
 import path from 'node:path'
@@ -44,7 +44,8 @@ export default defineEventHandler(async (event) => {
   const saved = await store.create<Omit<MediaItem, '_id' | 'createdAt'>>(
     COLLECTION.MEDIA,
     mediaItem,
-    `feat(media): upload ${file.name} by ${user.email}`
+    `feat(media): upload ${file.name}`,
+    userAuthor(user)
   )
 
   setResponseStatus(event, 201)

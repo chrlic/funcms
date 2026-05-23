@@ -1,7 +1,7 @@
 import { useGitStore, COLLECTION } from '~/server/lib/store'
 import { compileCustomBlock } from '~/server/lib/custom-block-compiler'
 import { registerCustomBlock, unregisterCustomBlock } from '~/server/lib/custom-block-registry'
-import { requireRole } from '~/server/lib/auth'
+import { requireRole, userAuthor } from "~/server/lib/auth"
 import type { CustomBlockType } from '~/types'
 
 export default defineEventHandler(async (event) => {
@@ -19,7 +19,7 @@ export default defineEventHandler(async (event) => {
 
   // ─── PUT /api/block-types/:id ──────────────────────────────────────────────
   if (method === 'PUT') {
-    requireRole(event, 'admin')
+    const user = requireRole(event, 'admin')
 
     const body = await readBody<Partial<CustomBlockType>>(event)
 
@@ -40,7 +40,7 @@ export default defineEventHandler(async (event) => {
       patch.compiledJs = code
     }
 
-    const updated = await store.update(COLLECTION.BLOCK_TYPES, id, patch, `feat: update custom block type "${existing.slug}"`)
+    const updated = await store.update(COLLECTION.BLOCK_TYPES, id, patch, `feat: update custom block type "${existing.slug}"`, userAuthor(user))
 
     // Refresh server registry
     registerCustomBlock(updated as CustomBlockType)
@@ -50,9 +50,9 @@ export default defineEventHandler(async (event) => {
 
   // ─── DELETE /api/block-types/:id ───────────────────────────────────────────
   if (method === 'DELETE') {
-    requireRole(event, 'admin')
+    const deleteUser = requireRole(event, 'admin')
 
-    await store.delete(COLLECTION.BLOCK_TYPES, id, `chore: remove custom block type "${existing.slug}"`)
+    await store.delete(COLLECTION.BLOCK_TYPES, id, `chore: remove custom block type "${existing.slug}"`, userAuthor(deleteUser))
     unregisterCustomBlock(existing.slug)
 
     return { message: `Block type "${existing.slug}" deleted` }

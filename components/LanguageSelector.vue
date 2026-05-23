@@ -15,6 +15,7 @@ const route = useRoute()
 
 const { data } = await useFetch<{ data: SiteSettings }>('/api/settings', {
   key: 'site-settings',
+  default: () => ({ data: { siteName: 'FunCMS', navStyle: 'topbar', nav: [], footer: [], logo: '', tagline: '', favicon: '', socialLinks: {}, customCss: '', headScripts: '' } }),
 })
 
 const locales = computed<Locale[]>(() => data.value?.data?.locales ?? [])
@@ -53,7 +54,7 @@ function pathForLocale(locale: Locale): string {
 function isAvailable(locale: Locale): boolean {
   const list = props.availableLocales ?? injectedLocales.value
   if (!list || list.length === 0) return true  // no filter — show all
-  if (locale.default) return list.includes('__default__')
+  if (locale.default) return list.includes('__default__') || list.includes(locale.code)
   return list.includes(locale.code)
 }
 

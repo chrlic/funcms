@@ -1,5 +1,5 @@
 import { useGitStore, COLLECTION } from '~/server/lib/store'
-import { requireRole } from '~/server/lib/auth'
+import { requireRole, userAuthor } from '~/server/lib/auth'
 import type { Page } from '~/types'
 
 /**
@@ -34,7 +34,8 @@ export default defineEventHandler(async (event) => {
     COLLECTION.PAGES,
     id,
     data,
-    `feat(pages): restore "${historical.title}" to ${hash.slice(0, 7)} (by ${user.email})`
+    `feat(pages): restore "${historical.title}" to ${hash.slice(0, 7)}`,
+    userAuthor(user)
   )
 
   return { data: restored }

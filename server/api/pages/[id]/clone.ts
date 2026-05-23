@@ -1,5 +1,5 @@
 import { useGitStore, COLLECTION } from '~/server/lib/store'
-import { requireRole, getSessionId } from '~/server/lib/auth'
+import { requireRole, getSessionId, userAuthor } from '~/server/lib/auth'
 import type { Page, LocaleVariant } from '~/types'
 
 /**
@@ -13,7 +13,7 @@ import type { Page, LocaleVariant } from '~/types'
  */
 export default defineEventHandler(async (event) => {
   if (event.method === 'DELETE') {
-    requireRole(event, 'editor')
+    const user = requireRole(event, 'editor')
     const store = useGitStore()
     const id = getRouterParam(event, 'id')!
     const { targetLocale } = await readBody(event) as { targetLocale: string }
@@ -31,7 +31,7 @@ export default defineEventHandler(async (event) => {
       ? await store.sessionUpdate(sessionId, COLLECTION.PAGES, id, { locales: updatedLocales },
           `feat(pages): remove ${targetLocale} variant from "${source.title}"`)
       : await store.update<Page>(COLLECTION.PAGES, id, { locales: updatedLocales },
-          `feat(pages): remove ${targetLocale} variant from "${source.title}"`)
+          `feat(pages): remove ${targetLocale} variant from "${source.title}"`, userAuthor(user))
 
     if (!page) throw createError({ statusCode: 404, statusMessage: 'Page not found' })
     return { data: page }
@@ -41,7 +41,7 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 405, statusMessage: 'Method Not Allowed' })
   }
 
-  requireRole(event, 'editor')
+  const user = requireRole(event, 'editor')
   const store = useGitStore()
   const id = getRouterParam(event, 'id')!
   const { targetLocale, copyContent = true } = await readBody(event) as {
@@ -72,7 +72,7 @@ export default defineEventHandler(async (event) => {
     ? await store.sessionUpdate(sessionId, COLLECTION.PAGES, id, { locales: updatedLocales },
         `feat(pages): add ${targetLocale} variant to "${source.title}"`)
     : await store.update<Page>(COLLECTION.PAGES, id, { locales: updatedLocales },
-        `feat(pages): add ${targetLocale} variant to "${source.title}"`)
+        `feat(pages): add ${targetLocale} variant to "${source.title}"`, userAuthor(user))
 
   if (!page) throw createError({ statusCode: 404, statusMessage: 'Page not found' })
   return { data: page }

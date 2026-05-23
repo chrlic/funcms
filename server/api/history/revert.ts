@@ -1,5 +1,5 @@
 import { useGitStore } from '~/server/lib/store'
-import { requireRole } from '~/server/lib/auth'
+import { requireRole, userAuthor } from '~/server/lib/auth'
 
 /**
  * POST /api/history/revert
@@ -20,7 +20,8 @@ export default defineEventHandler(async (event) => {
 
   await store.revertToCommit(
     hash,
-    `feat(site): revert entire site to ${hash.slice(0, 7)} (by ${user.email})`
+    `feat(site): revert entire site to ${hash.slice(0, 7)}`,
+    userAuthor(user)
   )
 
   return { ok: true }

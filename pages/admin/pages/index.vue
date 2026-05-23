@@ -195,13 +195,23 @@ const statusColors: Record<string, string> = {
                   v-for="(variant, code) in p.locales"
                   :key="code"
                   :class="[
-                    'inline-flex items-center gap-0.5 pl-1.5 pr-0.5 py-0.5 rounded text-[10px] font-medium',
+                    'inline-flex items-center gap-1 pl-1.5 pr-0.5 py-0.5 rounded text-[10px] font-medium',
                     variant.status === 'published'
                       ? 'bg-green-50 dark:bg-green-900/30 text-green-700 dark:text-green-400'
-                      : 'bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400'
+                      : variant.status === 'archived'
+                        ? 'bg-gray-100 dark:bg-gray-700 text-gray-500'
+                        : 'bg-yellow-50 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-400'
                   ]"
                 >
-                  <NuxtLink :to="`/admin/pages/${p._id}`" :title="`Edit ${code} variant (${variant.status})`">{{ code }}</NuxtLink>
+                  <span
+                    :class="[
+                      'w-1.5 h-1.5 rounded-full flex-shrink-0',
+                      variant.status === 'published' ? 'bg-green-500' : variant.status === 'archived' ? 'bg-gray-400' : 'bg-yellow-500'
+                    ]"
+                  />
+                  <NuxtLink :to="{ path: `/admin/pages/${p._id}`, query: { locale: String(code) } }" :title="`Edit ${code} variant — ${variant.status}`">
+                    {{ locales.find(l => l.code === String(code))?.label ?? String(code) }}
+                  </NuxtLink>
                   <button
                     @click.stop="deleteVariant(p._id!, String(code), p.title)"
                     :title="`Remove ${code} variant`"

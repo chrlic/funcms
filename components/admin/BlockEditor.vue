@@ -4,7 +4,7 @@ import type { Block, CustomBlockField } from '~/types'
 import type { PropSchema } from '~/components/blocks/index'
 import { getBlockHints } from '~/composables/useCssHints'
 
-const props = defineProps<{ block: Block }>()
+const props = defineProps<{ block: Block; locale?: string }>()
 const emit = defineEmits<{
   update: [block: Block]
   remove: []
@@ -106,7 +106,7 @@ const hints = computed(() => getBlockHints(props.block.type))
             <span v-if="fieldSchema.required" class="text-red-400 ml-0.5">*</span>
           </label>
           <input v-if="fieldSchema.type === 'text' || fieldSchema.type === 'url'" :value="localProps[key] as string ?? fieldSchema.default as string ?? ''" :type="fieldSchema.type === 'url' ? 'url' : 'text'" class="w-full border rounded-lg px-3 py-2 text-sm dark:bg-gray-800 dark:border-gray-600 dark:text-white" @input="onField(key, ($event.target as HTMLInputElement).value)" />
-          <RichTextEditor v-else-if="fieldSchema.type === 'richtext'" :model-value="localProps[key] as string ?? fieldSchema.default as string ?? ''" @update:model-value="onField(key, $event)" />
+          <RichTextEditor v-else-if="fieldSchema.type === 'richtext'" :model-value="localProps[key] as string ?? fieldSchema.default as string ?? ''" :locale="locale" @update:model-value="onField(key, $event)" />
           <textarea v-else-if="fieldSchema.type === 'textarea'" :value="localProps[key] as string ?? fieldSchema.default as string ?? ''" rows="4" class="w-full border rounded-lg px-3 py-2 text-sm dark:bg-gray-800 dark:border-gray-600 dark:text-white font-mono resize-y" @input="onField(key, ($event.target as HTMLTextAreaElement).value)" />
           <input v-else-if="fieldSchema.type === 'number'" :value="localProps[key] as number ?? fieldSchema.default as number ?? 0" type="number" class="w-full border rounded-lg px-3 py-2 text-sm dark:bg-gray-800 dark:border-gray-600 dark:text-white" @input="onField(key, Number(($event.target as HTMLInputElement).value))" />
           <label v-else-if="fieldSchema.type === 'boolean'" class="flex items-center gap-2 cursor-pointer">

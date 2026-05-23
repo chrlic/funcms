@@ -1,5 +1,5 @@
 import { useGitStore, COLLECTION } from '~/server/lib/store'
-import { requireRole, getSessionId } from '~/server/lib/auth'
+import { requireRole, getSessionId, userAuthor } from '~/server/lib/auth'
 import type { Page } from '~/types'
 import type { StoreRecord } from '~/server/lib/git-store'
 
@@ -71,7 +71,7 @@ export default defineEventHandler(async (event) => {
 
     const page = sessionId
       ? await store.sessionCreate(sessionId, COLLECTION.PAGES, pageData, `feat(pages): create "${body.title}"`)
-      : await store.create(COLLECTION.PAGES, pageData, `feat(pages): create "${body.title}"`)
+      : await store.create(COLLECTION.PAGES, pageData, `feat(pages): create "${body.title}"`, userAuthor(user))
 
     setResponseStatus(event, 201)
     return { data: page }

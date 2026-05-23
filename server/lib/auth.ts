@@ -50,3 +50,8 @@ export function requireRole(event: H3Event, minRole: 'viewer' | 'editor' | 'admi
 export function getSessionId(event: H3Event): string | undefined {
   return getHeader(event, 'x-session-id') ?? requireAuth(event).sessionId
 }
+
+/** Returns { name, email } for use as a git commit author. */
+export function userAuthor(user: JwtPayload): { name: string; email: string } {
+  return { name: user.name, email: user.email }
+}

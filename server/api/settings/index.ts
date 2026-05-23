@@ -1,5 +1,5 @@
 import { useGitStore, COLLECTION } from '~/server/lib/store'
-import { requireRole, getSessionId } from '~/server/lib/auth'
+import { requireRole, getSessionId, userAuthor } from '~/server/lib/auth'
 import type { SiteSettings } from '~/types'
 
 const SETTINGS_ID = 'site'
@@ -32,7 +32,7 @@ export default defineEventHandler(async (event) => {
   }
 
   if (event.method === 'PUT') {
-    requireRole(event, 'admin')
+    const user = requireRole(event, 'admin')
     const sessionId = getSessionId(event)
     const body = await readBody(event) as Partial<SiteSettings>
 
@@ -45,9 +45,10 @@ export default defineEventHandler(async (event) => {
     }
 
     const existing = await store.findById<SiteSettings>(COLLECTION.SETTINGS, SETTINGS_ID)
+    const author = userAuthor(user)
     const updated = existing
-      ? await store.update<SiteSettings>(COLLECTION.SETTINGS, SETTINGS_ID, body, 'feat(settings): update site settings')
-      : await store.create<SiteSettings>(COLLECTION.SETTINGS, { _id: SETTINGS_ID, ...defaults, ...body }, 'feat(settings): init site settings')
+      ? await store.update<SiteSettings>(COLLECTION.SETTINGS, SETTINGS_ID, body, 'feat(settings): update site settings', author)
+      : await store.create<SiteSettings>(COLLECTION.SETTINGS, { _id: SETTINGS_ID, ...defaults, ...body }, 'feat(settings): init site settings', author)
     return { data: updated }
   }
 

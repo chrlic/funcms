@@ -46,34 +46,31 @@ const siteLocales = computed<Locale[]>(() => settingsData.value?.data?.locales ?
 const defaultLocale = computed(() => siteLocales.value.find(l => l.default) ?? siteLocales.value[0])
 
 // '' = root/default variant; locale code = specific variant
-const activeLocale = ref('')
+// Initialise from ?locale= query param so links from the pages list open the right tab
+const activeLocale = ref((route.query.locale as string) || '')
 
-// Computed that proxies locale-variant fields: reads from variant if active, root otherwise.
-// Writing goes to page.locales[activeLocale] or to root fields directly.
-const variant = computed<LocaleVariant>({
-  get() {
-    if (!page.value) return { title: '', meta: { title: '' }, blocks: [], status: 'draft' }
-    if (activeLocale.value && page.value.locales?.[activeLocale.value]) {
-      return page.value.locales[activeLocale.value]
-    }
-    return { title: page.value.title, meta: page.value.meta, blocks: page.value.blocks, status: page.value.status }
-  },
-  set(v: LocaleVariant) {
-    if (!page.value) return
-    if (activeLocale.value) {
-      page.value = {
-        ...page.value,
-        locales: { ...(page.value.locales ?? {}), [activeLocale.value]: v },
-      }
-    } else {
-      page.value = { ...page.value, title: v.title, meta: v.meta, blocks: v.blocks, status: v.status }
-    }
-    isDirty.value = true
-  },
+// Read-only computed view of the active locale's fields (or root fields when no locale is active).
+const variant = computed<LocaleVariant>(() => {
+  if (!page.value) return { title: '', meta: { title: '' }, blocks: [], status: 'draft' }
+  if (activeLocale.value && page.value.locales?.[activeLocale.value]) {
+    return page.value.locales[activeLocale.value]
+  }
+  return { title: page.value.title, meta: page.value.meta, blocks: page.value.blocks, status: page.value.status }
 })
 
+// Direct mutation — avoids writable computed setter which Vue batches unexpectedly.
 function setVariantField<K extends keyof LocaleVariant>(key: K, value: LocaleVariant[K]) {
-  variant.value = { ...variant.value, [key]: value }
+  if (!page.value) return
+  isDirty.value = true
+  if (activeLocale.value) {
+    if (!page.value.locales) page.value.locales = {}
+    page.value.locales[activeLocale.value] = {
+      ...(page.value.locales[activeLocale.value] ?? { title: '', meta: { title: '' }, blocks: [], status: 'draft' }),
+      [key]: value,
+    } as LocaleVariant
+  } else {
+    (page.value as Record<string, unknown>)[key] = value
+  }
 }
 
 // ─── Session guard ────────────────────────────────────────────────────────────
@@ -102,6 +99,8 @@ async function save() {
       method: 'PUT',
       body: page.value,
     })
+    // Reload from the worktree to confirm the server persisted the changes
+    await loadPage()
     session.markDirty()
     isDirty.value = false
     saved.value = true
@@ -456,6 +455,7 @@ function clonePreviewSlug() {
             <BlockEditor
               :key="block.id"
               :block="block"
+              :locale="activeLocale || undefined"
               @update="(b) => updateBlock(variant.blocks.indexOf(block), b)"
               @remove="removeBlock(variant.blocks.indexOf(block))"
               @move-up="moveBlock(variant.blocks.indexOf(block), 'up')"

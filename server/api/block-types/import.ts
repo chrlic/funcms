@@ -1,13 +1,12 @@
 import { useGitStore, COLLECTION } from '~/server/lib/store'
 import { compileCustomBlock } from '~/server/lib/custom-block-compiler'
 import { registerCustomBlock } from '~/server/lib/custom-block-registry'
-import { requireAuth, requireRole } from '~/server/lib/auth'
+import { requireAuth, requireRole, userAuthor } from "~/server/lib/auth"
 import type { CustomBlockType } from '~/types'
 
 /** POST /api/block-types/import — import a block type bundle exported via /export */
 export default defineEventHandler(async (event) => {
-  requireRole(event, 'admin')
-  const user = requireAuth(event)
+  const user = requireRole(event, 'admin')
 
   const body = await readBody<{
     _funcmsVersion?: number
@@ -50,7 +49,7 @@ export default defineEventHandler(async (event) => {
       fields: body.fields ?? [],
       updatedAt: now,
     }
-    const updated = await store.update(COLLECTION.BLOCK_TYPES, existing._id!, patch, `feat: import update custom block type "${body.slug}"`)
+    const updated = await store.update(COLLECTION.BLOCK_TYPES, existing._id!, patch, `feat: import update custom block type "${body.slug}"`, userAuthor(user))
     registerCustomBlock(updated as CustomBlockType)
     return { data: updated, imported: true, overwritten: true }
   }
@@ -64,10 +63,10 @@ export default defineEventHandler(async (event) => {
     fields: body.fields ?? [],
     createdAt: now,
     updatedAt: now,
-    createdBy: user._id,
+    createdBy: user.userId,
   }
 
-  const created = await store.create(COLLECTION.BLOCK_TYPES, record, `feat: import custom block type "${body.slug}"`)
+  const created = await store.create(COLLECTION.BLOCK_TYPES, record, `feat: import custom block type "${body.slug}"`, userAuthor(user))
   registerCustomBlock(created as CustomBlockType)
 
   return { data: created, imported: true, overwritten: false }

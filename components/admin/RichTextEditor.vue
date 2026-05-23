@@ -6,7 +6,7 @@ import Placeholder from '@tiptap/extension-placeholder'
 import { NamedStyle } from '~/composables/useTiptapNamedStyle'
 import { slugifyStyle } from '~/composables/useTypography'
 
-const props = defineProps<{ modelValue: string; placeholder?: string }>()
+const props = defineProps<{ modelValue: string; placeholder?: string; locale?: string }>()
 const emit = defineEmits<{ 'update:modelValue': [value: string] }>()
 
 const { namedStyles } = useTypography()
@@ -17,14 +17,30 @@ const showLinkDialog = ref(false)
 const linkHref = ref('')
 const linkNewTab = ref(false)
 const linkMode = ref<'page' | 'url'>('page')
+// The locale code to use for prefixing page links (e.g. 'en', 'de')
+const linkLocale = ref('')
 
 function openLinkDialog() {
   const prev = editor.value?.getAttributes('link')
   linkHref.value = prev?.href ?? ''
   linkNewTab.value = prev?.target === '_blank'
   linkMode.value = linkHref.value.startsWith('/') || linkHref.value === '' ? 'page' : 'url'
+  linkLocale.value = props.locale ?? ''
   loadPages()
   showLinkDialog.value = true
+}
+
+function pageUrl(page: { slug: string; locales?: Record<string, unknown> }): string {
+  const locale = linkLocale.value
+  if (!locale) return page.slug
+  const bare = page.slug.replace(/^\/[a-z]{2}(?:-[a-zA-Z]{2,4})?(?=\/|$)/i, '') || '/'
+  return `/${locale}${bare === '/' ? '' : bare}`
+}
+
+function pageHasLocale(page: { locales?: Record<string, unknown> }): boolean {
+  const locale = linkLocale.value
+  if (!locale) return true
+  return !!page.locales?.[locale]
 }
 
 function applyLink() {
@@ -229,11 +245,34 @@ const toolbarGroups: TipBtn[][] = [
             <button :class="['px-4 py-2 font-medium transition', linkMode === 'url'  ? 'bg-indigo-600 text-white' : 'text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700']" @click="linkMode = 'url'; linkHref = linkHref.startsWith('/') ? 'https://' : linkHref">URL</button>
           </div>
           <div v-if="linkMode === 'page'">
+            <!-- Locale selector: shown when the editor has a locale, allows switching target locale -->
+            <div v-if="locale" class="flex items-center gap-2 mb-2">
+              <label class="text-xs font-medium text-gray-500">Link locale:</label>
+              <button
+                :class="['px-2 py-0.5 text-xs rounded-full font-medium transition', !linkLocale ? 'bg-indigo-600 text-white' : 'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-300 hover:bg-gray-200']"
+                @click="linkLocale = ''; linkHref = ''"
+              >Default</button>
+              <button
+                :class="['px-2 py-0.5 text-xs rounded-full font-medium transition', linkLocale === locale ? 'bg-indigo-600 text-white' : 'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-300 hover:bg-gray-200']"
+                @click="linkLocale = locale; linkHref = ''"
+              >{{ locale.toUpperCase() }}</button>
+            </div>
             <label class="block text-xs font-medium text-gray-500 mb-1">Select page</label>
-            <select v-model="linkHref" class="w-full border rounded-lg px-3 py-2 text-sm dark:bg-gray-700 dark:border-gray-600 dark:text-white">
+            <select
+              :value="linkHref"
+              @change="linkHref = ($event.target as HTMLSelectElement).value"
+              class="w-full border rounded-lg px-3 py-2 text-sm dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+            >
               <option value="">— select a page —</option>
-              <option v-for="p in pages" :key="p._id" :value="p.slug">{{ p.title }} ({{ p.slug }})</option>
+              <template v-for="p in pages" :key="p._id">
+                <option v-if="!linkLocale || pageHasLocale(p)" :value="pageUrl(p)">
+                  {{ p.title }} ({{ pageUrl(p) }})
+                </option>
+              </template>
             </select>
+            <p v-if="linkLocale && pages.filter(p => pageHasLocale(p)).length === 0" class="mt-1 text-xs text-gray-400">
+              No pages have a <strong>{{ linkLocale }}</strong> variant yet.
+            </p>
           </div>
           <div v-else>
             <label class="block text-xs font-medium text-gray-500 mb-1">URL</label>

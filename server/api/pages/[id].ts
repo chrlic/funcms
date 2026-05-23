@@ -1,5 +1,5 @@
 import { useGitStore, COLLECTION } from '~/server/lib/store'
-import { requireRole, getSessionId } from '~/server/lib/auth'
+import { requireRole, getSessionId, userAuthor } from '~/server/lib/auth'
 import type { Page } from '~/types'
 
 export default defineEventHandler(async (event) => {
@@ -18,7 +18,7 @@ export default defineEventHandler(async (event) => {
 
   // PUT /api/pages/:id — full update, session-aware
   if (event.method === 'PUT') {
-    requireRole(event, 'editor')
+    const user = requireRole(event, 'editor')
     const body = await readBody(event) as Partial<Page>
     const sessionId = getSessionId(event)
 
@@ -26,7 +26,7 @@ export default defineEventHandler(async (event) => {
       ? await store.sessionUpdate(sessionId, COLLECTION.PAGES, id, body,
           `feat(pages): update "${body.title ?? id}"`)
       : await store.update<Page>(COLLECTION.PAGES, id, body,
-          `feat(pages): update "${body.title ?? id}"`)
+          `feat(pages): update "${body.title ?? id}"`, userAuthor(user))
 
     if (!page) throw createError({ statusCode: 404, statusMessage: 'Page not found' })
     return { data: page }
@@ -34,7 +34,7 @@ export default defineEventHandler(async (event) => {
 
   // PATCH /api/pages/:id — partial update, session-aware
   if (event.method === 'PATCH') {
-    requireRole(event, 'editor')
+    const user = requireRole(event, 'editor')
     const body = await readBody(event) as Partial<Page>
     const sessionId = getSessionId(event)
 
@@ -42,7 +42,7 @@ export default defineEventHandler(async (event) => {
       ? await store.sessionUpdate(sessionId, COLLECTION.PAGES, id, body,
           `feat(pages): patch ${id}`)
       : await store.update<Page>(COLLECTION.PAGES, id, body,
-          `feat(pages): patch ${id}`)
+          `feat(pages): patch ${id}`, userAuthor(user))
 
     if (!page) throw createError({ statusCode: 404, statusMessage: 'Page not found' })
     return { data: page }
@@ -50,13 +50,13 @@ export default defineEventHandler(async (event) => {
 
   // DELETE /api/pages/:id — session-aware
   if (event.method === 'DELETE') {
-    requireRole(event, 'admin')
+    const user = requireRole(event, 'admin')
     const sessionId = getSessionId(event)
 
     const deleted = sessionId
       ? await store.sessionDelete(sessionId, COLLECTION.PAGES, id,
           `feat(pages): delete ${id}`)
-      : await store.delete(COLLECTION.PAGES, id, `feat(pages): delete ${id}`)
+      : await store.delete(COLLECTION.PAGES, id, `feat(pages): delete ${id}`, userAuthor(user))
 
     if (!deleted) throw createError({ statusCode: 404, statusMessage: 'Page not found' })
     return { message: 'Page deleted' }

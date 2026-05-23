@@ -489,7 +489,52 @@ export class BranchedGitStore extends GitStore {
     })
   }
 
+  private async _promoteDraftPages(session: EditorSession): Promise<void> {
+    const wt = this.getWorktree(session.id)
+    const pages = await wt.listRecords<{ status: string; locales?: Record<string, { status: string }> }>('pages')
+    const now = new Date().toISOString()
+    const toWrite: typeof pages = []
+
+    for (const page of pages) {
+      let changed = false
+      const updated = { ...page, locales: page.locales ? { ...page.locales } : undefined }
+
+      if (updated.status === 'draft') {
+        updated.status = 'published'
+        changed = true
+      }
+
+      if (updated.locales) {
+        const newLocales: Record<string, { status: string }> = {}
+        for (const [code, variant] of Object.entries(updated.locales)) {
+          if (variant.status === 'draft') {
+            newLocales[code] = { ...variant, status: 'published' }
+            changed = true
+          } else {
+            newLocales[code] = variant
+          }
+        }
+        updated.locales = newLocales
+      }
+
+      if (changed) {
+        (updated as StoreRecord).updatedAt = now
+        toWrite.push(updated)
+      }
+    }
+
+    if (toWrite.length === 0) return
+
+    for (const page of toWrite) {
+      await wt.writeRecord('pages', page as StoreRecord, `feat(pages): publish on session merge`)
+    }
+  }
+
   private async _doMerge(session: EditorSession): Promise<PublishResult> {
+    // Promote all draft pages (and locale variants) in the worktree to published
+    // before merging so the Publish button always makes content live.
+    await this._promoteDraftPages(session)
+
     // Merge with -X theirs so the session's version always wins on conflict.
     // For a CMS the editor's explicit save is the source of truth — there is
     // no meaningful "both sides changed" scenario worth surfacing to the user.

@@ -1,5 +1,5 @@
 import { useGitStore, COLLECTION } from '~/server/lib/store'
-import { requireRole } from '~/server/lib/auth'
+import { requireRole, userAuthor } from '~/server/lib/auth'
 import { promises as fs } from 'node:fs'
 import path from 'node:path'
 import type { MediaItem } from '~/types'
@@ -21,7 +21,7 @@ export default defineEventHandler(async (event) => {
 
   // DELETE /api/media/:id
   if (event.method === 'DELETE') {
-    requireRole(event, 'editor')
+    const user = requireRole(event, 'editor')
 
     const item = await store.findById<MediaRecord>(COLLECTION.MEDIA, id)
     if (!item) throw createError({ statusCode: 404, statusMessage: 'Not found' })
@@ -31,7 +31,7 @@ export default defineEventHandler(async (event) => {
     const filePath = path.join(config.contentDir, 'uploads', item.filename)
     await fs.unlink(filePath).catch(() => {})
 
-    await store.delete(COLLECTION.MEDIA, id, `feat(media): delete ${item.filename}`)
+    await store.delete(COLLECTION.MEDIA, id, `feat(media): delete ${item.filename}`, userAuthor(user))
 
     return { message: 'Deleted' }
   }
