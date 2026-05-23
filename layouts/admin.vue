@@ -7,7 +7,7 @@ const sidebarOpen = ref(true)
 const { data: settingsData } = useAsyncData<{ data: SiteSettings }>(
   'site-settings',
   () => $fetch('/api/settings'),
-  { lazy: true, default: () => ({ data: { siteName: 'FunCMS', nav: [], footer: [], logo: '', tagline: '', favicon: '', socialLinks: {}, customCss: '', headScripts: '', typography: { bodyFont: 'system-ui, sans-serif', headingFont: 'system-ui, sans-serif', baseSize: '16px', styles: [] } } }) }
+  { lazy: true, default: () => ({ data: { siteName: 'FunCMS', nav: [], footerColumns: [], logo: '', tagline: '', favicon: '', socialLinks: {}, customCss: '', headScripts: '', typography: { bodyFont: 'system-ui, sans-serif', headingFont: 'system-ui, sans-serif', baseSize: '16px', styles: [] } } }) }
 )
 const siteName = computed(() => settingsData.value?.data?.siteName || 'FunCMS')
 const siteLogo = computed(() => settingsData.value?.data?.logo || '')

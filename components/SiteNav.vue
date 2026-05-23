@@ -4,12 +4,23 @@ import type { SiteSettings, NavItem } from '~/types'
 
 const { data } = await useFetch<{ data: SiteSettings }>('/api/settings', {
   key: 'site-settings',
-  default: () => ({ data: { siteName: 'FunCMS', navStyle: 'topbar', nav: [], footer: [], logo: '', tagline: '', favicon: '', socialLinks: {}, customCss: '', headScripts: '' } }),
+  default: () => ({ data: { siteName: 'FunCMS', navStyle: 'topbar', nav: [], footerColumns: [], logo: '', tagline: '', favicon: '', socialLinks: {}, customCss: '', headScripts: '' } }),
 })
 
 const NuxtLink = resolveComponent('NuxtLink')
-const settings = computed(() => data.value?.data)
+const settings = computed(() => data.value?.data ?? null)
+const { currentLocale } = useCurrentLocale(settings)
+
 const navStyle = computed(() => settings.value?.navStyle ?? 'topbar')
+
+const activeNav = computed(() => {
+  const s = settings.value
+  if (!s) return []
+  if (currentLocale.value && s.navLocales?.[currentLocale.value]?.length) {
+    return s.navLocales[currentLocale.value]
+  }
+  return s.nav ?? []
+})
 const mobileOpen = ref(false)
 const openDropdown = ref<number | null>(null)
 const sidebarOpen = ref(true)
@@ -43,7 +54,7 @@ function navLinkProps(item: NavItem) {
 
       <!-- Desktop nav -->
       <nav class="hidden md:flex items-center gap-1" @mouseleave="closeDropdowns">
-        <div v-for="(item, i) in settings?.nav ?? []" :key="i" class="relative">
+        <div v-for="(item, i) in activeNav" :key="i" class="relative">
 
           <template v-if="item.children && item.children.length > 0">
             <button
@@ -93,7 +104,7 @@ function navLinkProps(item: NavItem) {
 
     <!-- Mobile menu -->
     <div v-if="mobileOpen" class="md:hidden border-t dark:border-gray-700 px-4 py-2 space-y-0.5">
-      <template v-for="(item, i) in settings?.nav ?? []" :key="i">
+      <template v-for="(item, i) in activeNav" :key="i">
         <template v-if="item.children && item.children.length > 0">
           <button class="w-full flex items-center justify-between px-3 py-2 rounded-lg text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800" @click="toggleDropdown(i)">
             {{ item.label }}
@@ -156,7 +167,7 @@ function navLinkProps(item: NavItem) {
 
       <!-- Nav links -->
       <nav class="flex-1 overflow-y-auto px-2 py-3 space-y-0.5">
-        <template v-for="(item, i) in settings?.nav ?? []" :key="i">
+        <template v-for="(item, i) in activeNav" :key="i">
           <template v-if="item.children && item.children.length > 0">
             <button
               class="w-full flex items-center gap-2 px-2 py-2 rounded-lg text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 transition"
@@ -199,7 +210,7 @@ function navLinkProps(item: NavItem) {
           </button>
         </div>
         <nav class="flex-1 overflow-y-auto px-3 py-3 space-y-0.5">
-          <template v-for="(item, i) in settings?.nav ?? []" :key="i">
+          <template v-for="(item, i) in activeNav" :key="i">
             <template v-if="item.children && item.children.length > 0">
               <button class="w-full flex items-center justify-between px-3 py-2 rounded-lg text-sm text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800" @click="toggleDropdown(i)">
                 {{ item.label }}

@@ -1,6 +1,6 @@
 import { useGitStore, COLLECTION } from '~/server/lib/store'
 import { requireRole } from '~/server/lib/auth'
-import type { Page, SiteSettings, NavItem } from '~/types'
+import type { Page, SiteSettings, NavItem, FooterColumn } from '~/types'
 
 export type IssueSeverity = 'error' | 'warning' | 'info'
 
@@ -230,14 +230,22 @@ export default defineEventHandler(async (event) => {
     }
   }
 
-  // Nav and footer links
+  // Nav links (main nav + locale navs)
   const navLinks = [
     ...linksFromNav(settings?.nav ?? []),
-    ...linksFromNav(settings?.footer ?? []),
     ...Object.values(settings?.navLocales ?? {}).flatMap(items => linksFromNav(items)),
   ]
   for (const href of navLinks) {
     classifyLinks([href], { source: 'nav' }, 'nav')
+  }
+
+  // Footer block links (default + all locale overrides)
+  const allFooterColumns = [
+    ...(settings?.footerColumns ?? []),
+    ...Object.values(settings?.footerLocales ?? {}).flat(),
+  ]
+  for (const col of allFooterColumns) {
+    classifyLinks(linksFromBlock(col.block.props ?? {}), {}, 'footer')
   }
 
   // ─── 7. Internal link validity ────────────────────────────────────────────
@@ -253,7 +261,7 @@ export default defineEventHandler(async (event) => {
     if (!available) {
       issues.push({
         severity: 'error', category: 'Broken internal link',
-        message: `Link to "${link.href}" found in ${link.source === 'nav' ? 'nav/footer' : `"${link.pageTitle}"`}${link.locale ? ` (${link.locale})` : ''} — no page with slug "${bare}"`,
+        message: `Link to "${link.href}" found in ${link.source === 'nav' || link.source === 'footer' ? 'nav/footer' : `"${link.pageTitle}"`}${link.locale ? ` (${link.locale})` : ''} — no page with slug "${bare}"`,
         pageId: link.pageId, pageSlug: link.pageSlug, pageTitle: link.pageTitle, locale: link.locale, url: link.href,
       })
       continue
@@ -263,7 +271,7 @@ export default defineEventHandler(async (event) => {
     if (linkLocale && !available.has(linkLocale)) {
       issues.push({
         severity: 'error', category: 'Broken locale link',
-        message: `Link to "${link.href}" in ${link.source === 'nav' ? 'nav/footer' : `"${link.pageTitle}"`}${link.locale ? ` (${link.locale})` : ''} — page "${bare}" has no published "${linkLocale}" variant`,
+        message: `Link to "${link.href}" in ${link.source === 'nav' || link.source === 'footer' ? 'nav/footer' : `"${link.pageTitle}"`}${link.locale ? ` (${link.locale})` : ''} — page "${bare}" has no published "${linkLocale}" variant`,
         pageId: link.pageId, pageSlug: link.pageSlug, pageTitle: link.pageTitle, locale: link.locale, url: link.href,
       })
     }
@@ -293,9 +301,14 @@ export default defineEventHandler(async (event) => {
 
   // ─── 9. Nav items pointing to unpublished / non-existent pages ────────────
 
+  const allFooterBlockLinks = [
+    ...(settings?.footerColumns ?? []),
+    ...Object.values(settings?.footerLocales ?? {}).flat(),
+  ].flatMap(col => linksFromBlock(col.block.props ?? {}))
   const allNavLinks = [
     ...linksFromNav(settings?.nav ?? []),
-    ...linksFromNav(settings?.footer ?? []),
+    ...Object.values(settings?.navLocales ?? {}).flatMap(items => linksFromNav(items)),
+    ...allFooterBlockLinks,
   ]
   for (const href of allNavLinks) {
     if (!href.startsWith('/')) continue

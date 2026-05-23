@@ -179,6 +179,25 @@ export interface Locale {
   default?: boolean  // exactly one locale should be default
 }
 
+export type FooterColWidth = '1/4' | '1/3' | '1/2' | '2/3' | '3/4' | 'full'
+
+export interface FooterColVisibility {
+  sm: boolean   // ≥640px
+  md: boolean   // ≥768px
+  lg: boolean   // ≥1024px
+  xl: boolean   // ≥1280px
+}
+
+export interface FooterColumn {
+  id: string
+  block: Block
+  width: FooterColWidth
+  /** Smallest breakpoint at which this column is visible. Hidden below it. */
+  showFrom: 'xs' | 'sm' | 'md' | 'lg' | 'xl'
+  /** Largest breakpoint at which this column is visible. Hidden above it. '' = always */
+  hideFrom: '' | 'sm' | 'md' | 'lg' | 'xl'
+}
+
 export interface SiteSettings {
   siteName: string
   tagline?: string
@@ -187,7 +206,9 @@ export interface SiteSettings {
   navStyle?: NavStyle
   nav: NavItem[]
   navLocales?: Record<string, NavItem[]>  // per-locale nav overrides; key = locale code
-  footer: NavItem[]
+  footerColumns?: FooterColumn[]
+  footerLocales?: Record<string, FooterColumn[]>  // per-locale footer overrides; key = locale code
+  footerPadding?: 'none' | 'xs' | 'sm' | 'md' | 'lg' | 'xl'
   socialLinks: Record<string, string>
   customCss?: string
   headScripts?: string

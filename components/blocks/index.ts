@@ -28,6 +28,22 @@ const blockRegistry: Record<BlockType, Component> = {
 
 export default blockRegistry
 
+// ─── Human-readable block type labels ──────────────────────────────────────────
+
+export const builtinBlockTypes: { type: BlockType; label: string }[] = [
+  { type: 'hero',       label: 'Hero' },
+  { type: 'rich-text',  label: 'Rich Text' },
+  { type: 'media-text', label: 'Media + Text' },
+  { type: 'grid',       label: 'Grid' },
+  { type: 'image',      label: 'Image' },
+  { type: 'gallery',    label: 'Gallery' },
+  { type: 'video',      label: 'Video' },
+  { type: 'cta',        label: 'Call to Action' },
+  { type: 'card-row',   label: 'Card Row' },
+  { type: 'divider',    label: 'Divider' },
+  { type: 'raw-html',   label: 'Raw HTML' },
+]
+
 // ─── Block schema registry ──────────────────────────────────────────────────────
 // Each block declares the editable props schema used by the admin panel
 // to auto-generate the settings form. No extra admin UI code needed per block.

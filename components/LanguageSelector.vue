@@ -15,7 +15,7 @@ const route = useRoute()
 
 const { data } = await useFetch<{ data: SiteSettings }>('/api/settings', {
   key: 'site-settings',
-  default: () => ({ data: { siteName: 'FunCMS', navStyle: 'topbar', nav: [], footer: [], logo: '', tagline: '', favicon: '', socialLinks: {}, customCss: '', headScripts: '' } }),
+  default: () => ({ data: { siteName: 'FunCMS', navStyle: 'topbar', nav: [], footerColumns: [], logo: '', tagline: '', favicon: '', socialLinks: {}, customCss: '', headScripts: '' } }),
 })
 
 const locales = computed<Locale[]>(() => data.value?.data?.locales ?? [])

@@ -197,28 +197,56 @@ components:
         light:       { $ref: '#/components/schemas/ThemeTokens' }
         dark:        { $ref: '#/components/schemas/ThemeTokens' }
 
+    FooterColWidth:
+      type: string
+      enum: ['1/4', '1/3', '1/2', '2/3', '3/4', full]
+
+    FooterColumn:
+      type: object
+      required: [id, block, width, showFrom, hideFrom]
+      properties:
+        id:       { type: string }
+        block:    { $ref: '#/components/schemas/Block' }
+        width:    { $ref: '#/components/schemas/FooterColWidth' }
+        showFrom:
+          type: string
+          enum: [xs, sm, md, lg, xl]
+          description: "Minimum breakpoint at which the column is visible"
+        hideFrom:
+          type: string
+          enum: ['', sm, md, lg, xl]
+          description: "Breakpoint at and above which the column is hidden. Empty = never hide"
+
     SiteSettings:
       type: object
-      required: [siteName, nav, footer, socialLinks]
+      required: [siteName, nav, socialLinks]
       properties:
-        siteName:   { type: string }
-        tagline:    { type: string }
-        logo:       { type: string }
-        favicon:    { type: string }
-        navStyle:   { type: string, enum: [topbar, sidebar-left] }
-        nav:        { type: array, items: { $ref: '#/components/schemas/NavItem' } }
+        siteName:      { type: string }
+        tagline:       { type: string }
+        logo:          { type: string }
+        favicon:       { type: string }
+        navStyle:      { type: string, enum: [topbar, sidebar-left] }
+        nav:           { type: array, items: { $ref: '#/components/schemas/NavItem' } }
         navLocales:
           type: object
           additionalProperties: { type: array, items: { $ref: '#/components/schemas/NavItem' } }
           description: "Per-locale nav overrides; key = locale code"
-        footer:     { type: array, items: { $ref: '#/components/schemas/NavItem' } }
+        footerColumns: { type: array, items: { $ref: '#/components/schemas/FooterColumn' } }
+        footerLocales:
+          type: object
+          additionalProperties: { type: array, items: { $ref: '#/components/schemas/FooterColumn' } }
+          description: "Per-locale footer overrides; key = locale code. Falls back to footerColumns when absent."
+        footerPadding:
+          type: string
+          enum: [none, xs, sm, md, lg, xl]
+          description: "Vertical padding of the footer container"
         socialLinks:
           type: object
           additionalProperties: { type: string }
-        customCss:   { type: string }
-        headScripts: { type: string }
-        typography:  { $ref: '#/components/schemas/SiteTypography' }
-        locales:     { type: array, items: { $ref: '#/components/schemas/Locale' } }
+        customCss:     { type: string }
+        headScripts:   { type: string }
+        typography:    { $ref: '#/components/schemas/SiteTypography' }
+        locales:       { type: array, items: { $ref: '#/components/schemas/Locale' } }
 
     # ─── Custom Block Types ─────────────────────────────────────────────────────
 

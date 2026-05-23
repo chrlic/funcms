@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import type { SiteSettings, NavItem, TextStyle, ThemeTokens, Locale } from '~/types'
+import type { SiteSettings, NavItem, TextStyle, ThemeTokens, Locale, FooterColumn, FooterColWidth, Block } from '~/types'
+import { blockSchemas, builtinBlockTypes } from '~/components/blocks/index'
 import { siteCssHints } from '~/composables/useCssHints'
 import { defaultLight, defaultDark } from '~/composables/useTypography'
 
@@ -29,6 +30,7 @@ onMounted(async () => {
   ])
   settings.value = sRes.data
   if (!settings.value.nav) settings.value.nav = []
+  if (!settings.value.footerColumns) settings.value.footerColumns = []
   if (!settings.value.navLocales) settings.value.navLocales = {}
   if (!settings.value.locales) settings.value.locales = []
   if (!settings.value.typography) settings.value.typography = { ...defaultTypography }
@@ -165,19 +167,27 @@ function setDefault(i: number) {
   settings.value!.locales!.forEach((l, idx) => { l.default = idx === i })
 }
 
-// ─── Per-locale nav ───────────────────────────────────────────────────────────
+// ─── Nav section + locale tab ─────────────────────────────────────────────────
+// navSection: 'main' | 'footer'
+// navLocaleTab: '__default__' | locale code (only applies when navSection === 'main')
+// footerLocaleTab: '__default__' | locale code (only applies when navSection === 'footer')
 
+const navSection = ref<'main' | 'footer'>('main')
 const navLocaleTab = ref<string>('__default__')
+const footerLocaleTab = ref<string>('__default__')
 
 const activeNavItems = computed<NavItem[]>({
   get() {
     if (!settings.value) return []
+    if (navSection.value === 'footer') return settings.value.footer ?? []
     if (navLocaleTab.value === '__default__') return settings.value.nav
     return settings.value.navLocales?.[navLocaleTab.value] ?? []
   },
   set(val) {
     if (!settings.value) return
-    if (navLocaleTab.value === '__default__') {
+    if (navSection.value === 'footer') {
+      settings.value.footer = val
+    } else if (navLocaleTab.value === '__default__') {
       settings.value.nav = val
     } else {
       if (!settings.value.navLocales) settings.value.navLocales = {}
@@ -203,6 +213,112 @@ function moveActiveNavItem(i: number, dir: -1 | 1) {
   if (j < 0 || j >= items.length) return
   const tmp = items[i]; items[i] = items[j]; items[j] = tmp
   activeNavItems.value = items
+}
+
+// ─── Footer columns ───────────────────────────────────────────────────────────
+
+// Active footer column list — default or per-locale
+const activeFooterColumns = computed<FooterColumn[]>({
+  get() {
+    if (!settings.value) return []
+    if (footerLocaleTab.value !== '__default__') {
+      return settings.value.footerLocales?.[footerLocaleTab.value] ?? []
+    }
+    return settings.value.footerColumns ?? []
+  },
+  set(val) {
+    if (!settings.value) return
+    if (footerLocaleTab.value !== '__default__') {
+      if (!settings.value.footerLocales) settings.value.footerLocales = {}
+      settings.value.footerLocales[footerLocaleTab.value] = val
+    } else {
+      settings.value.footerColumns = val
+    }
+  },
+})
+
+const footerWidthOptions: Array<{ value: FooterColWidth; label: string }> = [
+  { value: '1/4', label: '1/4' },
+  { value: '1/3', label: '1/3' },
+  { value: '1/2', label: '1/2' },
+  { value: '2/3', label: '2/3' },
+  { value: '3/4', label: '3/4' },
+  { value: 'full', label: 'Full' },
+]
+
+const breakpointOptions = [
+  { value: 'xs', label: 'Always' },
+  { value: 'sm', label: 'sm (640px+)' },
+  { value: 'md', label: 'md (768px+)' },
+  { value: 'lg', label: 'lg (1024px+)' },
+  { value: 'xl', label: 'xl (1280px+)' },
+]
+
+const hideFromOptions = [
+  { value: '', label: 'Never hide' },
+  { value: 'sm', label: 'Below sm (<640px)' },
+  { value: 'md', label: 'Below md (<768px)' },
+  { value: 'lg', label: 'Below lg (<1024px)' },
+  { value: 'xl', label: 'Below xl (<1280px)' },
+]
+
+// Track which column's type picker is open (-1 = none)
+const pickerOpenFor = ref(-1)
+
+function newFooterColumn(): FooterColumn {
+  return {
+    id: crypto.randomUUID(),
+    block: { id: crypto.randomUUID(), type: 'rich-text', order: 0, slot: 'footer', visible: true, props: { content: '' } } as Block,
+    width: '1/4',
+    showFrom: 'xs',
+    hideFrom: '',
+  }
+}
+
+function addFooterColumn() {
+  activeFooterColumns.value = [...activeFooterColumns.value, newFooterColumn()]
+}
+
+function removeFooterColumn(i: number) {
+  const cols = [...activeFooterColumns.value]
+  cols.splice(i, 1)
+  activeFooterColumns.value = cols
+}
+
+function moveFooterColumn(i: number, dir: -1 | 1) {
+  const cols = [...activeFooterColumns.value]
+  const j = i + dir
+  if (j < 0 || j >= cols.length) return
+  const tmp = cols[i]; cols[i] = cols[j]; cols[j] = tmp
+  activeFooterColumns.value = cols
+}
+
+function updateFooterColumnBlock(i: number, block: Block) {
+  const cols = [...activeFooterColumns.value]
+  cols[i] = { ...cols[i], block }
+  activeFooterColumns.value = cols
+}
+
+const bpOrder = ['xs', 'sm', 'md', 'lg', 'xl']
+function isVisibleAt(col: FooterColumn, bp: string): boolean {
+  const bpIdx = bpOrder.indexOf(bp)
+  const showIdx = bpOrder.indexOf(col.showFrom)
+  const hideIdx = col.hideFrom ? bpOrder.indexOf(col.hideFrom) : bpOrder.length
+  return bpIdx >= showIdx && bpIdx < hideIdx
+}
+
+function changeFooterBlockType(i: number, type: string) {
+  const cols = [...activeFooterColumns.value]
+  const col = cols[i]
+  const defaults: Record<string, unknown> = {}
+  const schema = blockSchemas[type]
+  if (schema) {
+    for (const [key, ps] of Object.entries(schema)) {
+      if (ps.default !== undefined) defaults[key] = ps.default
+    }
+  }
+  cols[i] = { ...col, block: { ...col.block, id: col.block.id, type, props: defaults } }
+  activeFooterColumns.value = cols
 }
 
 // ─── Site history ─────────────────────────────────────────────────────────────
@@ -374,11 +490,25 @@ function formatDate(iso: string) {
 
     <!-- ── NAVIGATION ─────────────────────────────────────────────────────── -->
     <div v-else-if="tab === 'navigation'" class="space-y-6">
-      <div class="bg-white dark:bg-gray-800 rounded-xl shadow-sm p-6">
 
-        <!-- Locale switcher (only shown when locales are configured) -->
+      <!-- Main / Footer section switcher -->
+      <div class="flex items-center gap-2">
+        <button
+          @click="navSection = 'main'"
+          :class="['px-4 py-2 text-sm rounded-lg border transition font-medium', navSection === 'main' ? 'bg-indigo-600 text-white border-indigo-600' : 'border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700']"
+        >Main nav</button>
+        <button
+          @click="navSection = 'footer'"
+          :class="['px-4 py-2 text-sm rounded-lg border transition font-medium', navSection === 'footer' ? 'bg-indigo-600 text-white border-indigo-600' : 'border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700']"
+        >Footer</button>
+      </div>
+
+      <!-- ── MAIN NAV ── -->
+      <div v-if="navSection === 'main'" class="bg-white dark:bg-gray-800 rounded-xl shadow-sm p-6">
+
+        <!-- Locale switcher -->
         <div v-if="settings.locales?.length" class="flex items-center gap-2 mb-5 pb-4 border-b dark:border-gray-700">
-          <span class="text-xs text-gray-400 font-medium mr-1">Nav for:</span>
+          <span class="text-xs text-gray-400 font-medium mr-1">Locale:</span>
           <button
             @click="navLocaleTab = '__default__'"
             :class="['px-3 py-1 text-xs rounded-lg border transition font-medium', navLocaleTab === '__default__' ? 'bg-indigo-600 text-white border-indigo-600' : 'border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700']"
@@ -408,40 +538,33 @@ function formatDate(iso: string) {
 
         <div class="space-y-3">
           <div v-for="(item, i) in activeNavItems" :key="i" class="border dark:border-gray-600 rounded-lg overflow-hidden">
-            <!-- Top-level item -->
             <div class="flex items-center gap-2 px-4 py-3 bg-gray-50 dark:bg-gray-700">
               <svg class="w-4 h-4 text-gray-400 shrink-0" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
                 <path fill-rule="evenodd" d="M2 4.75A.75.75 0 0 1 2.75 4h14.5a.75.75 0 0 1 0 1.5H2.75A.75.75 0 0 1 2 4.75ZM2 10a.75.75 0 0 1 .75-.75h14.5a.75.75 0 0 1 0 1.5H2.75A.75.75 0 0 1 2 10Zm0 5.25a.75.75 0 0 1 .75-.75h14.5a.75.75 0 0 1 0 1.5H2.75a.75.75 0 0 1-.75-.75Z" clip-rule="evenodd"/>
               </svg>
               <input v-model="item.label" placeholder="Label" class="w-32 border rounded-lg px-2.5 py-1.5 text-sm dark:bg-gray-800 dark:border-gray-600 dark:text-white" />
-
               <div class="flex rounded-lg border dark:border-gray-600 overflow-hidden text-xs">
                 <button :class="['px-2 py-1.5 font-medium transition', hrefMode(item) === 'page' ? 'bg-indigo-600 text-white' : 'text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-600']" @click="setHrefMode(item, 'page')">Page</button>
                 <button :class="['px-2 py-1.5 font-medium transition', hrefMode(item) === 'url' ? 'bg-indigo-600 text-white' : 'text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-600']" @click="setHrefMode(item, 'url')">URL</button>
               </div>
-
               <select v-if="hrefMode(item) === 'page'" v-model="item.href" class="flex-1 min-w-0 border rounded-lg px-2.5 py-1.5 text-sm dark:bg-gray-800 dark:border-gray-600 dark:text-white">
                 <option value="">— select a page —</option>
                 <option v-for="p in pages" :key="p._id" :value="p.slug">{{ p.title }} ({{ p.slug }})</option>
               </select>
               <input v-else v-model="item.href" type="url" placeholder="https://…" class="flex-1 min-w-0 border rounded-lg px-2.5 py-1.5 text-sm dark:bg-gray-800 dark:border-gray-600 dark:text-white" />
-
               <label class="flex items-center gap-1 text-xs text-gray-500 dark:text-gray-400 shrink-0 cursor-pointer">
-                <input type="checkbox" v-model="item.newTab" class="rounded" />
-                New tab
+                <input type="checkbox" v-model="item.newTab" class="rounded" /> New tab
               </label>
-
-              <button @click="moveActiveNavItem(i, -1)" :disabled="i === 0" class="p-1 text-gray-400 hover:text-gray-700 disabled:opacity-30" title="Move up">
+              <button @click="moveActiveNavItem(i, -1)" :disabled="i === 0" class="p-1 text-gray-400 hover:text-gray-700 disabled:opacity-30">
                 <svg class="w-4 h-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M9.47 6.47a.75.75 0 0 1 1.06 0l4.25 4.25a.75.75 0 1 1-1.06 1.06L10 8.06l-3.72 3.72a.75.75 0 0 1-1.06-1.06l4.25-4.25Z" clip-rule="evenodd"/></svg>
               </button>
-              <button @click="moveActiveNavItem(i, 1)" :disabled="i === activeNavItems.length - 1" class="p-1 text-gray-400 hover:text-gray-700 disabled:opacity-30" title="Move down">
+              <button @click="moveActiveNavItem(i, 1)" :disabled="i === activeNavItems.length - 1" class="p-1 text-gray-400 hover:text-gray-700 disabled:opacity-30">
                 <svg class="w-4 h-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M5.22 8.22a.75.75 0 0 1 1.06 0L10 11.94l3.72-3.72a.75.75 0 1 1 1.06 1.06l-4.25 4.25a.75.75 0 0 1-1.06 0L5.22 9.28a.75.75 0 0 1 0-1.06Z" clip-rule="evenodd"/></svg>
               </button>
-              <button @click="removeActiveNavItem(i)" class="p-1 text-gray-400 hover:text-red-500" title="Remove">
+              <button @click="removeActiveNavItem(i)" class="p-1 text-gray-400 hover:text-red-500">
                 <svg class="w-4 h-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M8.75 1A2.75 2.75 0 0 0 6 3.75v.443c-.795.077-1.584.176-2.365.298a.75.75 0 1 0 .23 1.482l.149-.022.841 10.518A2.75 2.75 0 0 0 7.596 19h4.807a2.75 2.75 0 0 0 2.742-2.53l.841-10.52.149.023a.75.75 0 0 0 .23-1.482A41.03 41.03 0 0 0 14 4.193V3.75A2.75 2.75 0 0 0 11.25 1h-2.5ZM10 4c.84 0 1.673.025 2.5.075V3.75c0-.69-.56-1.25-1.25-1.25h-2.5c-.69 0-1.25.56-1.25 1.25v.325C8.327 4.025 9.16 4 10 4ZM8.58 7.72a.75.75 0 0 0-1.5.06l.3 7.5a.75.75 0 1 0 1.5-.06l-.3-7.5Zm4.34.06a.75.75 0 1 0-1.5-.06l-.3 7.5a.75.75 0 1 0 1.5.06l.3-7.5Z" clip-rule="evenodd"/></svg>
               </button>
             </div>
-
             <!-- Children -->
             <div v-if="item.children && item.children.length > 0" class="divide-y dark:divide-gray-600 border-t dark:border-gray-600">
               <div v-for="(child, ci) in item.children" :key="ci" class="flex items-center gap-2 px-4 py-2.5 pl-10">
@@ -466,13 +589,175 @@ function formatDate(iso: string) {
                 <button @click="removeChild(item, ci)" class="p-1 text-gray-400 hover:text-red-500"><svg class="w-3 h-3" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M8.75 1A2.75 2.75 0 0 0 6 3.75v.443c-.795.077-1.584.176-2.365.298a.75.75 0 1 0 .23 1.482l.149-.022.841 10.518A2.75 2.75 0 0 0 7.596 19h4.807a2.75 2.75 0 0 0 2.742-2.53l.841-10.52.149.023a.75.75 0 0 0 .23-1.482A41.03 41.03 0 0 0 14 4.193V3.75A2.75 2.75 0 0 0 11.25 1h-2.5ZM10 4c.84 0 1.673.025 2.5.075V3.75c0-.69-.56-1.25-1.25-1.25h-2.5c-.69 0-1.25.56-1.25 1.25v.325C8.327 4.025 9.16 4 10 4ZM8.58 7.72a.75.75 0 0 0-1.5.06l.3 7.5a.75.75 0 1 0 1.5-.06l-.3-7.5Zm4.34.06a.75.75 0 1 0-1.5-.06l-.3 7.5a.75.75 0 1 0 1.5.06l.3-7.5Z" clip-rule="evenodd"/></svg></button>
               </div>
             </div>
-
             <!-- Add child -->
             <div class="px-4 py-2 border-t dark:border-gray-600 bg-gray-50/50 dark:bg-gray-700/50">
               <button @click="addChild(item)" class="flex items-center gap-1 text-xs text-gray-400 hover:text-indigo-600 transition">
                 <svg class="w-3.5 h-3.5" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"><path d="M10.75 4.75a.75.75 0 0 0-1.5 0v4.5h-4.5a.75.75 0 0 0 0 1.5h4.5v4.5a.75.75 0 0 0 1.5 0v-4.5h4.5a.75.75 0 0 0 0-1.5h-4.5v-4.5Z"/></svg>
                 Add sub-item
               </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ── FOOTER COLUMNS ── -->
+      <div v-else class="space-y-4">
+        <!-- Footer padding -->
+        <div class="bg-white dark:bg-gray-800 rounded-xl border dark:border-gray-700 px-4 py-3 flex items-center gap-4">
+          <span class="text-xs font-medium text-gray-500 dark:text-gray-400 shrink-0">Vertical padding:</span>
+          <div class="flex rounded-lg border dark:border-gray-600 overflow-hidden text-xs">
+            <button
+              v-for="opt in [
+                { value: 'none', label: 'None' },
+                { value: 'xs',   label: 'XS' },
+                { value: 'sm',   label: 'SM' },
+                { value: 'md',   label: 'MD' },
+                { value: 'lg',   label: 'LG' },
+                { value: 'xl',   label: 'XL' },
+              ]"
+              :key="opt.value"
+              @click="settings!.footerPadding = opt.value as SiteSettings['footerPadding']"
+              :class="['px-2.5 py-1.5 font-medium transition', (settings!.footerPadding ?? 'md') === opt.value ? 'bg-indigo-600 text-white' : 'text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-600']"
+            >{{ opt.label }}</button>
+          </div>
+        </div>
+
+        <!-- Locale tabs -->
+        <div v-if="settings.locales?.length" class="flex items-center gap-2 pb-1">
+          <span class="text-xs text-gray-400 font-medium mr-1">Locale:</span>
+          <button
+            @click="footerLocaleTab = '__default__'"
+            :class="['px-3 py-1 text-xs rounded-lg border transition font-medium', footerLocaleTab === '__default__' ? 'bg-indigo-600 text-white border-indigo-600' : 'border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700']"
+          >Default</button>
+          <button
+            v-for="locale in settings.locales"
+            :key="locale.code"
+            @click="footerLocaleTab = locale.code"
+            :class="['px-3 py-1 text-xs rounded-lg border transition font-medium', footerLocaleTab === locale.code ? 'bg-indigo-600 text-white border-indigo-600' : 'border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700']"
+          >{{ locale.label || locale.code }}</button>
+          <p v-if="footerLocaleTab !== '__default__'" class="ml-2 text-xs text-gray-400 italic">Leave empty to fall back to Default footer</p>
+        </div>
+
+        <div class="flex items-center justify-between">
+          <div>
+            <h2 class="font-semibold text-gray-700 dark:text-gray-300 text-sm uppercase tracking-wide">Footer Columns</h2>
+            <p class="text-xs text-gray-400 mt-0.5">Each column renders a block. Columns sit side-by-side and wrap on small screens per the visibility settings.</p>
+          </div>
+          <button @click="addFooterColumn" class="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-gray-900 dark:bg-white text-white dark:text-gray-900 rounded-lg hover:opacity-80 transition">
+            <svg class="w-4 h-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"><path d="M10.75 4.75a.75.75 0 0 0-1.5 0v4.5h-4.5a.75.75 0 0 0 0 1.5h4.5v4.5a.75.75 0 0 0 1.5 0v-4.5h4.5a.75.75 0 0 0 0-1.5h-4.5v-4.5Z"/></svg>
+            Add column
+          </button>
+        </div>
+
+        <p v-if="!activeFooterColumns.length" class="text-sm text-gray-400 italic text-center py-12 bg-white dark:bg-gray-800 rounded-xl border dark:border-gray-700">
+          No footer columns yet — click "Add column"<template v-if="footerLocaleTab !== '__default__'"> (will fall back to Default)</template>
+        </p>
+
+        <!-- Visual preview bar -->
+        <div v-if="activeFooterColumns.length" class="flex gap-1 h-8 rounded-lg overflow-hidden border dark:border-gray-700">
+          <div
+            v-for="col in activeFooterColumns"
+            :key="col.id"
+            class="flex items-center justify-center text-xs font-mono text-white bg-indigo-500 truncate px-1 transition-all"
+            :style="{
+              flex: col.width === '1/4' ? '1' : col.width === '1/3' ? '4/3' : col.width === '1/2' ? '2' : col.width === '2/3' ? '8/3' : col.width === '3/4' ? '3' : '4'
+            }"
+          >{{ col.width }}</div>
+        </div>
+
+        <div class="space-y-4">
+          <div
+            v-for="(col, i) in activeFooterColumns"
+            :key="col.id"
+            class="bg-white dark:bg-gray-800 rounded-xl border dark:border-gray-700 overflow-hidden"
+          >
+            <!-- Column header bar -->
+            <div class="flex items-center gap-3 px-4 py-3 bg-gray-50 dark:bg-gray-700/60 border-b dark:border-gray-700">
+              <span class="text-xs font-medium text-gray-500 dark:text-gray-400">Col {{ i + 1 }}</span>
+
+              <!-- Block type selector -->
+              <button
+                @click="pickerOpenFor = i"
+                class="flex items-center gap-1.5 border rounded-lg px-2.5 py-1 text-xs dark:bg-gray-800 dark:border-gray-600 dark:text-white hover:border-indigo-400 transition"
+              >
+                <svg class="w-3.5 h-3.5 text-indigo-500" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                  <path d="M12 4.467c0-.405.262-.75.559-1.027.504-.46.857-1.08.857-1.773a.75.75 0 0 0-.75-.75 3.504 3.504 0 0 0-3.5 3.5c0 .097.004.193.012.288A4.498 4.498 0 0 0 5.5 9.25H4.25a.75.75 0 0 0 0 1.5H5.5v.5H4.25a.75.75 0 0 0 0 1.5H5.5a4.5 4.5 0 0 0 4.5 4.5v1.25a.75.75 0 0 0 1.5 0V17.25a4.5 4.5 0 0 0 4.5-4.5h1.25a.75.75 0 0 0 0-1.5H16v-.5h1.25a.75.75 0 0 0 0-1.5H16a4.498 4.498 0 0 0-3.678-4.427c.008-.095.012-.19.012-.288A.75.75 0 0 0 12 4.467Z"/>
+                </svg>
+                {{ builtinBlockTypes.find(b => b.type === col.block.type)?.label ?? col.block.type }}
+                <svg class="w-3 h-3 text-gray-400" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M5.22 8.22a.75.75 0 0 1 1.06 0L10 11.94l3.72-3.72a.75.75 0 1 1 1.06 1.06l-4.25 4.25a.75.75 0 0 1-1.06 0L5.22 9.28a.75.75 0 0 1 0-1.06Z" clip-rule="evenodd"/></svg>
+              </button>
+              <BlockTypePicker
+                :open="pickerOpenFor === i"
+                @pick="changeFooterBlockType(i, $event); pickerOpenFor = -1"
+                @close="pickerOpenFor = -1"
+              />
+
+              <!-- Width -->
+              <div class="flex items-center gap-1.5 ml-auto">
+                <span class="text-xs text-gray-400">Width:</span>
+                <div class="flex rounded-lg border dark:border-gray-600 overflow-hidden text-xs">
+                  <button
+                    v-for="opt in footerWidthOptions"
+                    :key="opt.value"
+                    @click="col.width = opt.value"
+                    :class="['px-2 py-1 font-medium transition', col.width === opt.value ? 'bg-indigo-600 text-white' : 'text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-600']"
+                  >{{ opt.label }}</button>
+                </div>
+              </div>
+
+              <!-- Reorder + delete -->
+              <button @click="moveFooterColumn(i, -1)" :disabled="i === 0" class="p-1 text-gray-400 hover:text-gray-700 disabled:opacity-30">
+                <svg class="w-4 h-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M9.47 6.47a.75.75 0 0 1 1.06 0l4.25 4.25a.75.75 0 1 1-1.06 1.06L10 8.06l-3.72 3.72a.75.75 0 0 1-1.06-1.06l4.25-4.25Z" clip-rule="evenodd"/></svg>
+              </button>
+              <button @click="moveFooterColumn(i, 1)" :disabled="i === activeFooterColumns.length - 1" class="p-1 text-gray-400 hover:text-gray-700 disabled:opacity-30">
+                <svg class="w-4 h-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M5.22 8.22a.75.75 0 0 1 1.06 0L10 11.94l3.72-3.72a.75.75 0 1 1 1.06 1.06l-4.25 4.25a.75.75 0 0 1-1.06 0L5.22 9.28a.75.75 0 0 1 0-1.06Z" clip-rule="evenodd"/></svg>
+              </button>
+              <button @click="removeFooterColumn(i)" class="p-1 text-gray-400 hover:text-red-500">
+                <svg class="w-4 h-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M8.75 1A2.75 2.75 0 0 0 6 3.75v.443c-.795.077-1.584.176-2.365.298a.75.75 0 1 0 .23 1.482l.149-.022.841 10.518A2.75 2.75 0 0 0 7.596 19h4.807a2.75 2.75 0 0 0 2.742-2.53l.841-10.52.149.023a.75.75 0 0 0 .23-1.482A41.03 41.03 0 0 0 14 4.193V3.75A2.75 2.75 0 0 0 11.25 1h-2.5ZM10 4c.84 0 1.673.025 2.5.075V3.75c0-.69-.56-1.25-1.25-1.25h-2.5c-.69 0-1.25.56-1.25 1.25v.325C8.327 4.025 9.16 4 10 4ZM8.58 7.72a.75.75 0 0 0-1.5.06l.3 7.5a.75.75 0 1 0 1.5-.06l-.3-7.5Zm4.34.06a.75.75 0 1 0-1.5-.06l-.3 7.5a.75.75 0 1 0 1.5.06l.3-7.5Z" clip-rule="evenodd"/></svg>
+              </button>
+            </div>
+
+            <!-- Responsive visibility -->
+            <div class="flex items-center gap-4 px-4 py-2.5 bg-gray-50/50 dark:bg-gray-700/30 border-b dark:border-gray-700">
+              <span class="text-xs text-gray-400 shrink-0">Visible:</span>
+              <div class="flex items-center gap-2">
+                <label class="text-xs text-gray-500 dark:text-gray-400">Show from</label>
+                <select
+                  v-model="col.showFrom"
+                  class="border rounded-lg px-2 py-1 text-xs dark:bg-gray-800 dark:border-gray-600 dark:text-white"
+                >
+                  <option v-for="bp in breakpointOptions" :key="bp.value" :value="bp.value">{{ bp.label }}</option>
+                </select>
+              </div>
+              <div class="flex items-center gap-2">
+                <label class="text-xs text-gray-500 dark:text-gray-400">Hide from</label>
+                <select
+                  v-model="col.hideFrom"
+                  class="border rounded-lg px-2 py-1 text-xs dark:bg-gray-800 dark:border-gray-600 dark:text-white"
+                >
+                  <option v-for="bp in hideFromOptions" :key="bp.value" :value="bp.value">{{ bp.label }}</option>
+                </select>
+              </div>
+              <!-- Breakpoint preview chips -->
+              <div class="flex items-center gap-1 ml-auto">
+                <span
+                  v-for="bp in ['xs','sm','md','lg','xl']"
+                  :key="bp"
+                  class="text-[10px] px-1.5 py-0.5 rounded font-mono"
+                  :class="isVisibleAt(col, bp) ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' : 'bg-gray-100 text-gray-400 dark:bg-gray-700 dark:text-gray-500 line-through'"
+                >{{ bp }}</span>
+              </div>
+            </div>
+
+            <!-- Block editor -->
+            <div class="p-4">
+              <BlockEditor
+                :block="col.block"
+                @update="updateFooterColumnBlock(i, $event)"
+                @remove="removeFooterColumn(i)"
+                @move-up="moveFooterColumn(i, -1)"
+                @move-down="moveFooterColumn(i, 1)"
+              />
             </div>
           </div>
         </div>

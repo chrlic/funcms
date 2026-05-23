@@ -178,10 +178,21 @@ export default defineEventHandler(async (event) => {
   nodes.push({ id: mainNavId, label: 'Nav', type: 'nav-root', navSection: '' })
   processNavItems(mainNavId, settings?.nav ?? [], '')
 
-  // Footer nav root
-  const footerNavId = 'nav:footer'
-  nodes.push({ id: footerNavId, label: 'Footer', type: 'nav-root', navSection: 'footer' })
-  processNavItems(footerNavId, settings?.footer ?? [], 'footer')
+  // Footer: block-based, extract links from block props and show as page links
+  for (const col of settings?.footerColumns ?? []) {
+    for (const href of linksFromBlock(col.block.props ?? {})) {
+      if (!href || href.startsWith('#') || href.startsWith('mailto:') || href.startsWith('tel:')) continue
+      if (href.startsWith('http://') || href.startsWith('https://')) {
+        const extId = `ext:${href}`
+        if (!nodes.find(n => n.id === extId)) nodes.push({ id: extId, label: href, type: 'external' })
+        addEdge({ source: mainNavId, target: extId, label: 'footer', type: 'nav-link', locale: 'footer' })
+      } else if (href.startsWith('/')) {
+        const { bare, locale: linkLocale } = stripLocale(href, localeCodes)
+        const pageId = slugToId.get(bare)
+        if (pageId) addEdge({ source: mainNavId, target: pageId, label: 'footer', type: 'nav-link', locale: linkLocale || 'footer' })
+      }
+    }
+  }
 
   // Locale-specific nav roots
   for (const [code, items] of Object.entries(settings?.navLocales ?? {})) {

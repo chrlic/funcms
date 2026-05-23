@@ -21,7 +21,7 @@ const layoutMap: Record<string, Component> = {
 // Reuses the cached fetch from SiteNav — no extra request
 const { data: settingsData } = await useFetch<{ data: SiteSettings }>('/api/settings', {
   key: 'site-settings',
-  default: () => ({ data: { siteName: 'FunCMS', navStyle: 'topbar', nav: [], footer: [], logo: '', tagline: '', favicon: '', socialLinks: {}, customCss: '', headScripts: '' } }),
+  default: () => ({ data: { siteName: 'FunCMS', navStyle: 'topbar', nav: [], footerColumns: [], logo: '', tagline: '', favicon: '', socialLinks: {}, customCss: '', headScripts: '' } }),
 })
 const navStyle = computed(() => settingsData.value?.data?.navStyle ?? 'topbar')
 const isSidebar = computed(() => navStyle.value === 'sidebar-left')
@@ -153,27 +153,30 @@ if (!page.value) {
   <!-- Sidebar layout: nav and content sit side-by-side in a flex row -->
   <div v-if="isSidebar" class="min-h-screen flex flex-row">
     <SiteNav />
-    <main class="flex-1 min-w-0 relative" :style="pageStyle">
-      <!-- Background overlay -->
-      <div v-if="overlayOpacity > 0" class="absolute inset-0 bg-black pointer-events-none" :style="{ opacity: overlayOpacity }" />
-      <div v-if="page" class="relative">
-        <component :is="layoutMap[page.layout] ?? LayoutFullWidth" :blocks-by-slot="blocksBySlot" :sidebar-width="page.layoutOptions?.sidebarWidth">
-          <template v-for="(blocks, slotName) in blocksBySlot" :key="slotName" #[slotName]>
-            <div v-for="block in blocks" :key="block.id" :class="`block-${block.id}`">
-              <component :is="(staticBlockRegistry as Record<string, Component>)[block.type] ?? customRegistry[block.type]" v-bind="block.props" />
-            </div>
-          </template>
-        </component>
-      </div>
-      <div v-else class="flex items-center justify-center py-32">
-        <div class="text-center">
-          <p class="text-7xl font-bold text-gray-200 dark:text-gray-700 mb-4">404</p>
-          <h1 class="text-2xl font-semibold text-gray-700 dark:text-gray-300 mb-2">Page not found</h1>
-          <p class="text-gray-500 mb-6">There's no published page at <code class="font-mono text-sm">{{ route.path }}</code>.</p>
-          <NuxtLink to="/admin" class="text-indigo-600 hover:underline text-sm">Go to admin</NuxtLink>
+    <div class="flex-1 min-w-0 flex flex-col">
+      <main class="flex-1 relative" :style="pageStyle">
+        <!-- Background overlay -->
+        <div v-if="overlayOpacity > 0" class="absolute inset-0 bg-black pointer-events-none" :style="{ opacity: overlayOpacity }" />
+        <div v-if="page" class="relative">
+          <component :is="layoutMap[page.layout] ?? LayoutFullWidth" :blocks-by-slot="blocksBySlot" :sidebar-width="page.layoutOptions?.sidebarWidth">
+            <template v-for="(blocks, slotName) in blocksBySlot" :key="slotName" #[slotName]>
+              <div v-for="block in blocks" :key="block.id" :class="`block-${block.id}`">
+                <component :is="(staticBlockRegistry as Record<string, Component>)[block.type] ?? customRegistry[block.type]" v-bind="block.props" />
+              </div>
+            </template>
+          </component>
         </div>
-      </div>
-    </main>
+        <div v-else class="flex items-center justify-center py-32">
+          <div class="text-center">
+            <p class="text-7xl font-bold text-gray-200 dark:text-gray-700 mb-4">404</p>
+            <h1 class="text-2xl font-semibold text-gray-700 dark:text-gray-300 mb-2">Page not found</h1>
+            <p class="text-gray-500 mb-6">There's no published page at <code class="font-mono text-sm">{{ route.path }}</code>.</p>
+            <NuxtLink to="/admin" class="text-indigo-600 hover:underline text-sm">Go to admin</NuxtLink>
+          </div>
+        </div>
+      </main>
+      <SiteFooter />
+    </div>
   </div>
 
   <!-- Topbar layout: nav stacks above content -->
@@ -202,5 +205,6 @@ if (!page.value) {
         </div>
       </div>
     </main>
+    <SiteFooter />
   </div>
 </template>
