@@ -1,0 +1,1442 @@
+openapi: 3.1.0
+info:
+  title: FunCMS API
+  version: 1.0.0
+  description: |
+    Headless CMS with git-backed storage and draft-branch-per-session editing.
+
+    **Auth:** Most write endpoints require a JWT sent as an `Authorization: Bearer <token>` header
+    or the `cms_token` httpOnly cookie set at login.
+
+    **Session-aware writes:** Editor endpoints accept an `X-Session-Id` header. When present,
+    writes go to an isolated git worktree (draft branch). Omitting the header writes directly
+    to `main` (admin-only operations like settings, users, seeding).
+
+    **Roles:** `viewer` < `editor` < `admin`. Each endpoint documents the minimum required role.
+
+servers:
+  - url: /api
+    description: Same-origin API
+
+# ─── Security ──────────────────────────────────────────────────────────────────
+
+components:
+  securitySchemes:
+    cookieAuth:
+      type: apiKey
+      in: cookie
+      name: cms_token
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  parameters:
+    sessionId:
+      name: X-Session-Id
+      in: header
+      required: false
+      schema:
+        type: string
+      description: Active editing session ID. Writes go to the session's draft worktree when present.
+
+  schemas:
+
+    # ─── Shared ────────────────────────────────────────────────────────────────
+
+    Error:
+      type: object
+      properties:
+        statusCode: { type: integer }
+        statusMessage: { type: string }
+
+    # ─── Auth ──────────────────────────────────────────────────────────────────
+
+    User:
+      type: object
+      properties:
+        _id:        { type: string }
+        email:      { type: string, format: email }
+        name:       { type: string }
+        role:       { type: string, enum: [admin, editor, viewer] }
+        createdAt:  { type: string, format: date-time }
+
+    # ─── Blocks ────────────────────────────────────────────────────────────────
+
+    Block:
+      type: object
+      required: [id, type, order, slot, visible, props]
+      properties:
+        id:        { type: string, format: uuid }
+        type:      { type: string, description: "Built-in type or custom block slug" }
+        order:     { type: integer }
+        slot:      { type: string, description: "Layout slot: main | sidebar | hero | etc." }
+        visible:   { type: boolean }
+        props:     { type: object, additionalProperties: true }
+        customCss: { type: string }
+
+    PageMeta:
+      type: object
+      required: [title]
+      properties:
+        title:       { type: string }
+        description: { type: string }
+        ogImage:     { type: string }
+        noIndex:     { type: boolean }
+        canonical:   { type: string }
+
+    PageStyle:
+      type: object
+      properties:
+        bgImage:    { type: string }
+        bgColor:    { type: string }
+        bgSize:     { type: string, enum: [cover, contain, auto] }
+        bgPosition: { type: string }
+        bgFixed:    { type: boolean }
+        bgOverlay:  { type: integer, minimum: 0, maximum: 100 }
+        customCss:  { type: string }
+
+    PageLayoutOptions:
+      type: object
+      properties:
+        sidebarWidth: { type: integer, minimum: 10, maximum: 50, description: "Percentage, sidebar-left/right only" }
+
+    LocaleVariant:
+      type: object
+      required: [title, meta, blocks, status]
+      properties:
+        title:  { type: string }
+        meta:   { $ref: '#/components/schemas/PageMeta' }
+        blocks: { type: array, items: { $ref: '#/components/schemas/Block' } }
+        status: { type: string, enum: [draft, published, archived] }
+
+    Page:
+      type: object
+      required: [slug, title, layout, status, meta, blocks]
+      properties:
+        _id:           { type: string, format: uuid }
+        slug:          { type: string, description: "Canonical slug without locale prefix, e.g. /about/team" }
+        title:         { type: string, description: "Default locale title (fallback)" }
+        layout:        { type: string, enum: [full-width, sidebar-left, sidebar-right, landing, blank] }
+        layoutOptions: { $ref: '#/components/schemas/PageLayoutOptions' }
+        style:         { $ref: '#/components/schemas/PageStyle' }
+        status:        { type: string, enum: [draft, published, archived], description: "Default locale status (fallback)" }
+        meta:          { $ref: '#/components/schemas/PageMeta' }
+        blocks:        { type: array, items: { $ref: '#/components/schemas/Block' }, description: "Default locale blocks (fallback)" }
+        locales:
+          type: object
+          additionalProperties: { $ref: '#/components/schemas/LocaleVariant' }
+          description: "Locale code → variant. Absent keys fall back to root fields."
+        createdAt:     { type: string, format: date-time }
+        updatedAt:     { type: string, format: date-time }
+        createdBy:     { type: string }
+
+    # ─── Media ─────────────────────────────────────────────────────────────────
+
+    MediaItem:
+      type: object
+      properties:
+        _id:          { type: string, format: uuid }
+        filename:     { type: string, description: "UUID-based stored filename" }
+        originalName: { type: string }
+        mimeType:     { type: string }
+        size:         { type: integer, description: "Bytes" }
+        url:          { type: string, description: "Relative URL: /api/media/files/{filename}" }
+        alt:          { type: string }
+        createdAt:    { type: string, format: date-time }
+
+    # ─── Settings ──────────────────────────────────────────────────────────────
+
+    NavItem:
+      type: object
+      required: [label, href]
+      properties:
+        label:    { type: string }
+        href:     { type: string }
+        newTab:   { type: boolean }
+        children: { type: array, items: { $ref: '#/components/schemas/NavItem' } }
+
+    Locale:
+      type: object
+      required: [code, label]
+      properties:
+        code:    { type: string, description: "e.g. en, cs, en-us" }
+        label:   { type: string, description: "e.g. English, Česky" }
+        default: { type: boolean, description: "Exactly one locale should be default" }
+
+    TextStyle:
+      type: object
+      required: [name, fontFamily, fontSize]
+      properties:
+        name:       { type: string }
+        fontFamily: { type: string }
+        fontSize:   { type: string }
+        fontWeight: { type: string }
+        lineHeight: { type: string }
+        color:      { type: string }
+
+    ThemeTokens:
+      type: object
+      properties:
+        background:    { type: string }
+        surface:       { type: string }
+        border:        { type: string }
+        textPrimary:   { type: string }
+        textSecondary: { type: string }
+        textHeading:   { type: string }
+        accent:        { type: string }
+        accentFg:      { type: string }
+
+    SiteTypography:
+      type: object
+      properties:
+        bodyFont:    { type: string }
+        headingFont: { type: string }
+        baseSize:    { type: string }
+        styles:      { type: array, items: { $ref: '#/components/schemas/TextStyle' } }
+        light:       { $ref: '#/components/schemas/ThemeTokens' }
+        dark:        { $ref: '#/components/schemas/ThemeTokens' }
+
+    SiteSettings:
+      type: object
+      required: [siteName, nav, footer, socialLinks]
+      properties:
+        siteName:   { type: string }
+        tagline:    { type: string }
+        logo:       { type: string }
+        favicon:    { type: string }
+        navStyle:   { type: string, enum: [topbar, sidebar-left] }
+        nav:        { type: array, items: { $ref: '#/components/schemas/NavItem' } }
+        navLocales:
+          type: object
+          additionalProperties: { type: array, items: { $ref: '#/components/schemas/NavItem' } }
+          description: "Per-locale nav overrides; key = locale code"
+        footer:     { type: array, items: { $ref: '#/components/schemas/NavItem' } }
+        socialLinks:
+          type: object
+          additionalProperties: { type: string }
+        customCss:   { type: string }
+        headScripts: { type: string }
+        typography:  { $ref: '#/components/schemas/SiteTypography' }
+        locales:     { type: array, items: { $ref: '#/components/schemas/Locale' } }
+
+    # ─── Custom Block Types ─────────────────────────────────────────────────────
+
+    CustomBlockField:
+      type: object
+      required: [name, type, label]
+      properties:
+        name:     { type: string }
+        type:     { type: string, enum: [text, textarea, richtext, number, boolean, select, image, color, url] }
+        label:    { type: string }
+        default:  {}
+        options:
+          type: array
+          items:
+            type: object
+            properties:
+              label: { type: string }
+              value: { type: string }
+        required: { type: boolean }
+
+    CustomBlockType:
+      type: object
+      required: [slug, label, source, compiledJs, fields]
+      properties:
+        _id:        { type: string, format: uuid }
+        slug:       { type: string, description: "Unique identifier used as block type, e.g. testimonial-card" }
+        label:      { type: string }
+        description:{ type: string }
+        source:     { type: string, description: "Original SFC source (template + script)" }
+        compiledJs: { type: string, description: "Compiled render function JS" }
+        fields:     { type: array, items: { $ref: '#/components/schemas/CustomBlockField' } }
+        createdAt:  { type: string, format: date-time }
+        updatedAt:  { type: string, format: date-time }
+        createdBy:  { type: string }
+
+    # ─── Sessions ──────────────────────────────────────────────────────────────
+
+    EditorSession:
+      type: object
+      properties:
+        id:          { type: string }
+        userId:      { type: string }
+        userEmail:   { type: string, format: email }
+        userName:    { type: string }
+        branch:      { type: string, description: "e.g. draft/alice/sess-abc123" }
+        forkPoint:   { type: string, description: "Commit hash of main when session was created" }
+        status:      { type: string, enum: [active, published, abandoned, conflict] }
+        createdAt:   { type: string, format: date-time }
+        updatedAt:   { type: string, format: date-time }
+        publishedAt: { type: string, format: date-time }
+
+    ChangedFile:
+      type: object
+      properties:
+        collection:    { type: string }
+        recordId:      { type: string }
+        operation:     { type: string, enum: [create, update, delete] }
+        changedFields: { type: array, items: { type: string } }
+
+    ConflictField:
+      type: object
+      properties:
+        field:   { type: string }
+        ours:    { description: "Value on the draft branch" }
+        theirs:  { description: "Value on main" }
+        base:    { description: "Common ancestor value" }
+
+    ConflictRecord:
+      type: object
+      properties:
+        collection:  { type: string }
+        recordId:    { type: string }
+        fields:      { type: array, items: { $ref: '#/components/schemas/ConflictField' } }
+        oursFull:    { type: object, additionalProperties: true }
+        theirsFull:  { type: object, additionalProperties: true }
+
+    PublishResult:
+      type: object
+      properties:
+        status:      { type: string, enum: [ok, conflict] }
+        conflicts:   { type: array, items: { $ref: '#/components/schemas/ConflictRecord' } }
+        mergeCommit: { type: string, description: "Main branch commit hash on success" }
+
+    FieldResolution:
+      type: object
+      required: [collection, recordId, resolutions]
+      properties:
+        collection:  { type: string }
+        recordId:    { type: string }
+        resolutions: { type: object, additionalProperties: true, description: "fieldName → chosen value" }
+
+    CommitEntry:
+      type: object
+      properties:
+        hash:    { type: string }
+        message: { type: string }
+        author:  { type: string }
+        date:    { type: string, format: date-time }
+
+    # ─── Audit ─────────────────────────────────────────────────────────────────
+
+    IssueSeverity:
+      type: string
+      enum: [error, warning, info]
+
+    AuditIssue:
+      type: object
+      required: [severity, category, message]
+      properties:
+        severity:  { $ref: '#/components/schemas/IssueSeverity' }
+        category:  { type: string }
+        message:   { type: string }
+        pageId:    { type: string }
+        pageSlug:  { type: string }
+        pageTitle: { type: string }
+        locale:    { type: string }
+        url:       { type: string }
+
+    AuditResult:
+      type: object
+      required: [ranAt, durationMs, pages, externalLinks, externalProbed, issues]
+      properties:
+        ranAt:           { type: string, format: date-time }
+        durationMs:      { type: integer }
+        pages:           { type: integer }
+        externalLinks:   { type: integer, description: "Total distinct external URLs found" }
+        externalProbed:  { type: boolean, description: "Whether external URLs were probed this run" }
+        issues:          { type: array, items: { $ref: '#/components/schemas/AuditIssue' } }
+
+    # ─── Site Map ──────────────────────────────────────────────────────────────
+
+    SiteMapNode:
+      type: object
+      required: [id, label, type]
+      properties:
+        id:         { type: string }
+        label:      { type: string }
+        type:       { type: string, enum: [page, nav-root, nav-item, external] }
+        slug:       { type: string }
+        status:     { type: string, enum: [published, draft] }
+        locales:    { type: array, items: { type: string }, description: "Locale codes with a published variant" }
+        navSection: { type: string, description: "Locale code or 'footer' for the nav section owning this node" }
+
+    SiteMapEdge:
+      type: object
+      required: [source, target, type, locale]
+      properties:
+        source: { type: string }
+        target: { type: string }
+        label:  { type: string, description: "Nav item name (nav-link) or locale code (locale-link)" }
+        locale: { type: string, description: "Locale this edge belongs to: '' = default, code = locale, 'footer' = footer" }
+        type:   { type: string, enum: [nav-tree, nav-link, link, locale-link] }
+
+    SiteMapData:
+      type: object
+      required: [nodes, edges, localeCodes, defaultLocale]
+      properties:
+        nodes:         { type: array, items: { $ref: '#/components/schemas/SiteMapNode' } }
+        edges:         { type: array, items: { $ref: '#/components/schemas/SiteMapEdge' } }
+        localeCodes:   { type: array, items: { type: string } }
+        defaultLocale: { type: string }
+
+security:
+  - cookieAuth: []
+  - bearerAuth: []
+
+# ─── Paths ─────────────────────────────────────────────────────────────────────
+
+paths:
+
+  # ── Auth ─────────────────────────────────────────────────────────────────────
+
+  /auth/login:
+    post:
+      summary: Login
+      description: Authenticates with email + password. Sets an httpOnly `cms_token` cookie and returns the JWT.
+      security: []
+      tags: [Auth]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password]
+              properties:
+                email:    { type: string, format: email }
+                password: { type: string }
+      responses:
+        '200':
+          description: Login successful
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      token: { type: string }
+                      user:  { $ref: '#/components/schemas/User' }
+        '401': { description: Invalid credentials }
+
+  /auth/logout:
+    post:
+      summary: Logout
+      description: Clears the `cms_token` cookie.
+      tags: [Auth]
+      responses:
+        '200':
+          description: Logged out
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message: { type: string }
+
+  /auth/me:
+    get:
+      summary: Current user
+      description: Returns the authenticated user. Requires any valid token.
+      tags: [Auth]
+      responses:
+        '200':
+          description: Current user
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: '#/components/schemas/User' }
+        '401': { description: Unauthorized }
+
+  # ── Pages ─────────────────────────────────────────────────────────────────────
+
+  /pages:
+    get:
+      summary: List pages
+      description: Returns paginated pages from the main branch. Public — no auth required.
+      tags: [Pages]
+      security: []
+      parameters:
+        - name: status
+          in: query
+          schema: { type: string, enum: [all, draft, published, archived] }
+        - name: search
+          in: query
+          schema: { type: string }
+        - name: page
+          in: query
+          schema: { type: integer, default: 1 }
+        - name: limit
+          in: query
+          schema: { type: integer, default: 20 }
+      responses:
+        '200':
+          description: Page list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:       { type: array, items: { $ref: '#/components/schemas/Page' } }
+                  total:      { type: integer }
+                  page:       { type: integer }
+                  limit:      { type: integer }
+                  totalPages: { type: integer }
+
+    post:
+      summary: Create page
+      description: Creates a new page. Requires editor role.
+      tags: [Pages]
+      parameters:
+        - $ref: '#/components/parameters/sessionId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [slug, title, layout, status, meta, blocks]
+              properties:
+                slug:   { type: string }
+                title:  { type: string }
+                layout: { type: string, enum: [full-width, sidebar-left, sidebar-right, landing, blank] }
+                status: { type: string, enum: [draft, published, archived] }
+                meta:   { $ref: '#/components/schemas/PageMeta' }
+                blocks: { type: array, items: { $ref: '#/components/schemas/Block' } }
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: '#/components/schemas/Page' }
+        '400': { description: Validation error }
+        '409': { description: Slug already exists }
+
+  /pages/by-slug:
+    get:
+      summary: Get published page by slug
+      description: |
+        Resolves a slug to a published page. Used by the public renderer.
+        When `locale` is supplied the response merges the locale variant fields over root fields.
+        Supports draft preview via `preview=1` + auth cookie + optional `sid` (session ID).
+      tags: [Pages]
+      security: []
+      parameters:
+        - name: slug
+          in: query
+          required: true
+          schema: { type: string }
+          description: "Bare slug without locale prefix, e.g. /about"
+        - name: locale
+          in: query
+          schema: { type: string }
+          description: "Locale code, e.g. en"
+        - name: preview
+          in: query
+          schema: { type: string, enum: ['1'] }
+        - name: sid
+          in: query
+          schema: { type: string }
+          description: "Session ID for previewing session-branch changes"
+      responses:
+        '200':
+          description: Page (locale variant fields merged when locale is specified)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: '#/components/schemas/Page' }
+        '404': { description: Page not found or not published }
+
+  /pages/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+
+    get:
+      summary: Get page by ID
+      description: |
+        Returns a page from the session worktree (if `X-Session-Id` is present and the file
+        exists there) or from the main index. No auth required for published pages.
+      tags: [Pages]
+      security: []
+      parameters:
+        - $ref: '#/components/parameters/sessionId'
+      responses:
+        '200':
+          description: Page
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: '#/components/schemas/Page' }
+        '404': { description: Not found }
+
+    put:
+      summary: Full page update
+      description: |
+        Replaces the page record. Session-aware — writes to the worktree when
+        `X-Session-Id` is provided. Requires editor role.
+      tags: [Pages]
+      parameters:
+        - $ref: '#/components/parameters/sessionId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/Page' }
+      responses:
+        '200':
+          description: Updated page
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: '#/components/schemas/Page' }
+        '404': { description: Not found }
+
+    patch:
+      summary: Partial page update
+      description: Merges supplied fields into the existing record. Session-aware. Requires editor role.
+      tags: [Pages]
+      parameters:
+        - $ref: '#/components/parameters/sessionId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/Page' }
+      responses:
+        '200':
+          description: Updated page
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: '#/components/schemas/Page' }
+        '404': { description: Not found }
+
+    delete:
+      summary: Delete page
+      description: Deletes the page. Session-aware. Requires admin role.
+      tags: [Pages]
+      parameters:
+        - $ref: '#/components/parameters/sessionId'
+      responses:
+        '200':
+          description: Deleted
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message: { type: string }
+        '404': { description: Not found }
+
+  /pages/{id}/clone:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+
+    post:
+      summary: Add locale variant
+      description: |
+        Adds a `LocaleVariant` to `page.locales[targetLocale]`. Copies root content when
+        `copyContent` is true (default). Status is always set to `draft`. Requires editor role.
+      tags: [Pages]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [targetLocale]
+              properties:
+                targetLocale: { type: string, description: "e.g. en, de" }
+                copyContent:  { type: boolean, default: true }
+      responses:
+        '200':
+          description: Updated page record containing the new variant
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: '#/components/schemas/Page' }
+        '404': { description: Page not found }
+        '409': { description: Locale variant already exists }
+
+    delete:
+      summary: Remove locale variant
+      description: Removes `page.locales[targetLocale]`. Requires editor role.
+      tags: [Pages]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [targetLocale]
+              properties:
+                targetLocale: { type: string }
+      responses:
+        '200':
+          description: Updated page record without the removed variant
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: '#/components/schemas/Page' }
+        '404': { description: Page or variant not found }
+
+  /pages/{id}/history:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+
+    get:
+      summary: Page git history / snapshot
+      description: |
+        Without `hash`: returns the git log for this page file.
+        With `hash`: returns a point-in-time snapshot of the page at that commit.
+        Requires editor role.
+      tags: [Pages]
+      parameters:
+        - name: hash
+          in: query
+          schema: { type: string }
+          description: "Commit hash for point-in-time snapshot"
+      responses:
+        '200':
+          description: List of commits, or a single Page snapshot
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - type: object
+                    properties:
+                      data: { type: array, items: { $ref: '#/components/schemas/CommitEntry' } }
+                  - type: object
+                    properties:
+                      data: { $ref: '#/components/schemas/Page' }
+        '404': { description: Not found }
+
+  /pages/{id}/restore:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+
+    post:
+      summary: Restore page to a previous commit
+      description: |
+        Non-destructive restore — creates a new commit reverting the page file to
+        its state at `hash`. The previous state remains in history. Session-aware.
+        Requires editor role.
+      tags: [Pages]
+      parameters:
+        - $ref: '#/components/parameters/sessionId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [hash]
+              properties:
+                hash: { type: string }
+      responses:
+        '200':
+          description: Restored page
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: '#/components/schemas/Page' }
+        '404': { description: Not found }
+
+  # ── Sessions ──────────────────────────────────────────────────────────────────
+
+  /sessions:
+    get:
+      summary: List sessions
+      description: Admins see all sessions; editors see only their own. Requires editor role.
+      tags: [Sessions]
+      responses:
+        '200':
+          description: Sessions
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { type: array, items: { $ref: '#/components/schemas/EditorSession' } }
+
+    post:
+      summary: Open editing session
+      description: |
+        Creates a new draft branch and git worktree for the authenticated user.
+        Returns the session record including the `id` to use as `X-Session-Id`.
+        Requires editor role.
+      tags: [Sessions]
+      responses:
+        '201':
+          description: Session created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: '#/components/schemas/EditorSession' }
+
+  /sessions/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema: { type: string }
+
+    get:
+      summary: Get session
+      description: Returns session info. Editors can only view their own sessions. Requires editor role.
+      tags: [Sessions]
+      responses:
+        '200':
+          description: Session
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: '#/components/schemas/EditorSession' }
+        '403': { description: Forbidden }
+        '404': { description: Not found }
+
+  /sessions/{id}/diff:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema: { type: string }
+
+    get:
+      summary: Session diff
+      description: Lists files changed on the session branch vs main. Requires editor role.
+      tags: [Sessions]
+      responses:
+        '200':
+          description: Changed files
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { type: array, items: { $ref: '#/components/schemas/ChangedFile' } }
+
+  /sessions/{id}/publish:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema: { type: string }
+
+    post:
+      summary: Publish session
+      description: |
+        Promotes all draft pages and locale variants in the worktree to `published`,
+        then merges the session branch into `main` with `-X theirs`.
+        Returns `status: ok` on a clean merge or `status: conflict` with field-level
+        conflict records when concurrent edits clash (rare with `-X theirs`).
+        Requires editor role.
+      tags: [Sessions]
+      responses:
+        '200':
+          description: Publish result
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: '#/components/schemas/PublishResult' }
+        '409':
+          description: Merge conflict
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: '#/components/schemas/PublishResult' }
+
+  /sessions/{id}/resolve:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema: { type: string }
+
+    post:
+      summary: Resolve conflicts and retry publish
+      description: |
+        Applies chosen field values to the worktree, commits the resolution, then
+        retries the merge. Requires editor role.
+      tags: [Sessions]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [resolutions]
+              properties:
+                resolutions:
+                  type: array
+                  items: { $ref: '#/components/schemas/FieldResolution' }
+      responses:
+        '200':
+          description: Publish result after resolution
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: '#/components/schemas/PublishResult' }
+
+  /sessions/{id}/abandon:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema: { type: string }
+
+    post:
+      summary: Abandon session
+      description: Discards all unsaved changes, deletes the worktree and draft branch. Requires editor role.
+      tags: [Sessions]
+      responses:
+        '200':
+          description: Abandoned
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message: { type: string }
+
+  # ── Media ─────────────────────────────────────────────────────────────────────
+
+  /media:
+    get:
+      summary: List media
+      description: Returns paginated media items. Requires editor role.
+      tags: [Media]
+      parameters:
+        - name: page
+          in: query
+          schema: { type: integer, default: 1 }
+        - name: limit
+          in: query
+          schema: { type: integer, default: 40 }
+      responses:
+        '200':
+          description: Media list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:       { type: array, items: { $ref: '#/components/schemas/MediaItem' } }
+                  total:      { type: integer }
+                  page:       { type: integer }
+                  limit:      { type: integer }
+                  totalPages: { type: integer }
+
+  /media/upload:
+    post:
+      summary: Upload file
+      description: Accepts multipart/form-data. Max file size 10 MB. Requires editor role.
+      tags: [Media]
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file: { type: string, format: binary }
+                alt:  { type: string }
+      responses:
+        '201':
+          description: Uploaded
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: '#/components/schemas/MediaItem' }
+        '400': { description: No file uploaded }
+        '413': { description: File too large (max 10 MB) }
+
+  /media/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+
+    get:
+      summary: Get media item metadata
+      description: Returns the media record. Requires editor role.
+      tags: [Media]
+      responses:
+        '200':
+          description: Media item
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: '#/components/schemas/MediaItem' }
+        '404': { description: Not found }
+
+    delete:
+      summary: Delete media item
+      description: Deletes the metadata record and the physical file. Requires editor role.
+      tags: [Media]
+      responses:
+        '200':
+          description: Deleted
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message: { type: string }
+        '404': { description: Not found }
+
+  /media/files/{filename}:
+    parameters:
+      - name: filename
+        in: path
+        required: true
+        schema: { type: string }
+
+    get:
+      summary: Serve uploaded file
+      description: Streams the raw file with the correct Content-Type header. No auth required.
+      tags: [Media]
+      security: []
+      responses:
+        '200':
+          description: Raw file
+          content:
+            '*/*':
+              schema:
+                type: string
+                format: binary
+        '404': { description: Not found }
+
+  # ── Settings ──────────────────────────────────────────────────────────────────
+
+  /settings:
+    get:
+      summary: Get site settings
+      description: Returns site settings. No auth required (used by public renderer).
+      tags: [Settings]
+      security: []
+      responses:
+        '200':
+          description: Settings
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: '#/components/schemas/SiteSettings' }
+
+    put:
+      summary: Update site settings
+      description: Replaces site settings. Session-aware. Requires admin role.
+      tags: [Settings]
+      parameters:
+        - $ref: '#/components/parameters/sessionId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/SiteSettings' }
+      responses:
+        '200':
+          description: Updated settings
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: '#/components/schemas/SiteSettings' }
+
+  # ── Block Types ───────────────────────────────────────────────────────────────
+
+  /block-types:
+    get:
+      summary: List custom block types
+      description: Returns all registered custom block types. No auth required.
+      tags: [Block Types]
+      security: []
+      responses:
+        '200':
+          description: Block types
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { type: array, items: { $ref: '#/components/schemas/CustomBlockType' } }
+
+    post:
+      summary: Create custom block type
+      description: Compiles and registers a new custom block type. Requires admin role.
+      tags: [Block Types]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [slug, label, source, fields]
+              properties:
+                slug:        { type: string, pattern: '^[a-z][a-z0-9-]*$' }
+                label:       { type: string }
+                description: { type: string }
+                source:      { type: string, description: "Vue SFC source" }
+                fields:      { type: array, items: { $ref: '#/components/schemas/CustomBlockField' } }
+      responses:
+        '200':
+          description: Created block type
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: '#/components/schemas/CustomBlockType' }
+        '400': { description: Validation error }
+        '409': { description: Slug already exists }
+        '422': { description: Compile error }
+
+  /block-types/import:
+    post:
+      summary: Import block type bundle
+      description: |
+        Imports a block type exported via `/block-types/{id}/export`.
+        Set `overwrite: true` to replace an existing block with the same slug.
+        Requires admin role.
+      tags: [Block Types]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [slug, label, source, fields]
+              properties:
+                _funcmsVersion: { type: integer }
+                slug:           { type: string }
+                label:          { type: string }
+                description:    { type: string }
+                source:         { type: string }
+                fields:         { type: array, items: { $ref: '#/components/schemas/CustomBlockField' } }
+                overwrite:      { type: boolean, default: false }
+      responses:
+        '200':
+          description: Imported block type
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:       { $ref: '#/components/schemas/CustomBlockType' }
+                  imported:   { type: boolean }
+                  overwritten:{ type: boolean }
+        '409': { description: Slug exists and overwrite not set }
+        '422': { description: Compile error }
+
+  /block-types/{id}:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+
+    get:
+      summary: Get custom block type
+      description: Returns a single block type. No auth required.
+      tags: [Block Types]
+      security: []
+      responses:
+        '200':
+          description: Block type
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: '#/components/schemas/CustomBlockType' }
+        '404': { description: Not found }
+
+    put:
+      summary: Update custom block type
+      description: |
+        Updates label, description, fields, and optionally re-compiles source.
+        Source is only re-compiled when it changes. Requires admin role.
+      tags: [Block Types]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                label:       { type: string }
+                description: { type: string }
+                source:      { type: string }
+                fields:      { type: array, items: { $ref: '#/components/schemas/CustomBlockField' } }
+      responses:
+        '200':
+          description: Updated block type
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: '#/components/schemas/CustomBlockType' }
+        '404': { description: Not found }
+        '422': { description: Compile error }
+
+    delete:
+      summary: Delete custom block type
+      description: Deletes the block type and unregisters it from the server registry. Requires admin role.
+      tags: [Block Types]
+      responses:
+        '200':
+          description: Deleted
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message: { type: string }
+        '404': { description: Not found }
+
+  /block-types/{id}/compiled:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+
+    get:
+      summary: Get compiled JS for a block type
+      description: Returns the compiled render function JavaScript. Used by the client-side block renderer.
+      tags: [Block Types]
+      security: []
+      responses:
+        '200':
+          description: Compiled JS
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      compiledJs: { type: string }
+        '404': { description: Not found }
+
+  /block-types/{id}/export:
+    parameters:
+      - name: id
+        in: path
+        required: true
+        schema: { type: string, format: uuid }
+
+    get:
+      summary: Export block type as portable bundle
+      description: |
+        Returns a JSON bundle suitable for import via `/block-types/import`.
+        The bundle includes `_funcmsVersion`, slug, label, description, source, and fields.
+        `compiledJs` is excluded — it is re-compiled on import.
+        Requires admin role.
+      tags: [Block Types]
+      responses:
+        '200':
+          description: Exportable block type bundle
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  _funcmsVersion: { type: integer }
+                  slug:           { type: string }
+                  label:          { type: string }
+                  description:    { type: string }
+                  source:         { type: string }
+                  fields:         { type: array, items: { $ref: '#/components/schemas/CustomBlockField' } }
+        '404': { description: Not found }
+
+  # ── History ───────────────────────────────────────────────────────────────────
+
+  /history:
+    get:
+      summary: Repo-wide commit history
+      description: Returns recent commits across all collections. Requires editor role.
+      tags: [History]
+      parameters:
+        - name: limit
+          in: query
+          schema: { type: integer, default: 50 }
+      responses:
+        '200':
+          description: Commits
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      allOf:
+                        - { $ref: '#/components/schemas/CommitEntry' }
+                        - type: object
+                          properties:
+                            files: { type: array, items: { type: string } }
+
+  /history/revert:
+    post:
+      summary: Revert repo to a commit
+      description: |
+        Reverts the entire content repo to a specific commit by creating a new
+        revert commit. Destructive — use with care. Requires admin role.
+      tags: [History]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [hash]
+              properties:
+                hash: { type: string }
+      responses:
+        '200':
+          description: Reverted
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message: { type: string }
+        '400': { description: Missing hash }
+
+  # ── Audit ─────────────────────────────────────────────────────────────────────
+
+  /audit:
+    get:
+      summary: Run site audit
+      description: |
+        Runs a full content audit and returns structured issues grouped by severity.
+
+        Checks performed:
+        - Duplicate slugs
+        - Invalid slugs (not starting with `/`)
+        - Pages never published in any locale
+        - Root page unpublished while a locale variant is published
+        - Pages missing locale variants for configured locales
+        - Broken internal links (no published page at target slug)
+        - Broken locale-prefixed internal links (variant not published)
+        - Orphaned published pages (not linked from nav or any page)
+        - Nav items pointing to unpublished or non-existent pages
+        - Published pages with no blocks
+        - Pages missing meta title
+        - (Optional) External link probing via HEAD requests
+
+        External link probing is disabled by default because it makes outbound
+        HTTP requests which may be inappropriate or slow in some environments.
+        Pass `probeExternal=1` to enable.
+      tags: [Audit]
+      security:
+        - cookieAuth: []
+        - bearerAuth: []
+      parameters:
+        - in: query
+          name: probeExternal
+          schema: { type: string, enum: ['0', '1', 'true', 'false'] }
+          required: false
+          description: Set to `1` or `true` to send HEAD requests to external URLs
+      responses:
+        '200':
+          description: Audit results
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: '#/components/schemas/AuditResult' }
+        '401': { description: Not authenticated }
+        '403': { description: Insufficient role (editor+ required) }
+
+  # ── Site Map ──────────────────────────────────────────────────────────────────
+
+  /sitemap:
+    get:
+      summary: Site graph data
+      description: |
+        Returns nodes (pages, nav, external URLs) and edges (nav links, page content links,
+        locale-prefixed links) suitable for rendering a graph visualization.
+
+        Node types:
+        - `page` — a CMS page record
+        - `nav` — virtual node representing the navigation structure
+        - `external` — an external URL found in page content or nav
+
+        Edge types:
+        - `nav` — link from nav/footer menu to a page or external URL
+        - `link` — internal page content link
+        - `locale-link` — locale-prefixed internal link (e.g. `/en/about`)
+      tags: [Audit]
+      security:
+        - cookieAuth: []
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Site map graph
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: '#/components/schemas/SiteMapData' }
+        '401': { description: Not authenticated }
+        '403': { description: Insufficient role (editor+ required) }
