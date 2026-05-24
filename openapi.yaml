@@ -419,6 +419,18 @@ components:
         localeCodes:   { type: array, items: { type: string } }
         defaultLocale: { type: string }
 
+    GlobalComponent:
+      type: object
+      required: [name, block]
+      properties:
+        _id:         { type: string, format: uuid }
+        name:        { type: string }
+        description: { type: string }
+        block:       { $ref: '#/components/schemas/Block' }
+        createdAt:   { type: string, format: date-time }
+        updatedAt:   { type: string, format: date-time }
+        createdBy:   { type: string, format: email }
+
     PageTemplate:
       type: object
       required: [name, layout, blocks]
@@ -1638,6 +1650,119 @@ paths:
     delete:
       summary: Delete template
       tags: [Templates]
+      security:
+        - cookieAuth: []
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Deleted
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message: { type: string }
+        '401': { description: Not authenticated }
+        '403': { description: Insufficient role (editor+ required) }
+        '404': { description: Not found }
+
+  # ── Global Components ─────────────────────────────────────────────────────────
+
+  /global-components:
+    get:
+      summary: List global components
+      description: Public — no auth required. Returns all global components.
+      tags: [Global Components]
+      responses:
+        '200':
+          description: Global component list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { type: array, items: { $ref: '#/components/schemas/GlobalComponent' } }
+    post:
+      summary: Create global component
+      tags: [Global Components]
+      security:
+        - cookieAuth: []
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, block]
+              properties:
+                name:        { type: string }
+                description: { type: string }
+                block:       { $ref: '#/components/schemas/Block' }
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: '#/components/schemas/GlobalComponent' }
+        '400': { description: Name or block is required }
+        '401': { description: Not authenticated }
+        '403': { description: Insufficient role (editor+ required) }
+
+  /global-components/{id}:
+    parameters:
+      - in: path
+        name: id
+        required: true
+        schema: { type: string, format: uuid }
+    get:
+      summary: Get global component
+      description: Public — no auth required.
+      tags: [Global Components]
+      responses:
+        '200':
+          description: Global component record
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: '#/components/schemas/GlobalComponent' }
+        '404': { description: Not found }
+    patch:
+      summary: Update global component
+      tags: [Global Components]
+      security:
+        - cookieAuth: []
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:        { type: string }
+                description: { type: string }
+                block:       { $ref: '#/components/schemas/Block' }
+      responses:
+        '200':
+          description: Updated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: '#/components/schemas/GlobalComponent' }
+        '401': { description: Not authenticated }
+        '403': { description: Insufficient role (editor+ required) }
+        '404': { description: Not found }
+    delete:
+      summary: Delete global component
+      tags: [Global Components]
       security:
         - cookieAuth: []
         - bearerAuth: []

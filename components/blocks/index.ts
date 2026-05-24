@@ -11,6 +11,7 @@ import CtaBlock from './CtaBlock.vue'
 import CardRowBlock from './CardRowBlock.vue'
 import DividerBlock from './DividerBlock.vue'
 import RawHtmlBlock from './RawHtmlBlock.vue'
+import GlobalBlock from './GlobalBlock.vue'
 
 const blockRegistry: Record<BlockType, Component> = {
   'hero': HeroBlock,
@@ -24,6 +25,7 @@ const blockRegistry: Record<BlockType, Component> = {
   'card-row': CardRowBlock,
   'divider': DividerBlock,
   'raw-html': RawHtmlBlock,
+  'global': GlobalBlock,
 }
 
 export default blockRegistry
@@ -42,6 +44,7 @@ export const builtinBlockTypes: { type: BlockType; label: string }[] = [
   { type: 'card-row',   label: 'Card Row' },
   { type: 'divider',    label: 'Divider' },
   { type: 'raw-html',   label: 'Raw HTML' },
+  { type: 'global',     label: 'Global Component' },
 ]
 
 // ─── Block schema registry ──────────────────────────────────────────────────────
@@ -49,7 +52,7 @@ export const builtinBlockTypes: { type: BlockType; label: string }[] = [
 // to auto-generate the settings form. No extra admin UI code needed per block.
 
 export interface PropSchema {
-  type: 'text' | 'textarea' | 'richtext' | 'number' | 'boolean' | 'select' | 'image' | 'color' | 'url'
+  type: 'text' | 'textarea' | 'richtext' | 'number' | 'boolean' | 'select' | 'image' | 'color' | 'url' | 'global-component'
   label: string
   default?: unknown
   options?: { label: string; value: string }[] // for 'select'
@@ -174,5 +177,8 @@ export const blockSchemas: Record<BlockType, Record<string, PropSchema>> = {
   'raw-html': {
     html: { type: 'textarea', label: 'HTML', required: true },
     dangerouslyDisableSanitize: { type: 'boolean', label: 'Disable Sanitization (admin only)', default: false },
+  },
+  'global': {
+    globalId: { type: 'global-component', label: 'Global Component', required: true },
   },
 }

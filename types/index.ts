@@ -206,6 +206,18 @@ export interface FooterColumn {
   hideFrom: '' | 'sm' | 'md' | 'lg' | 'xl'
 }
 
+// ─── Global Components ─────────────────────────────────────────────────────────
+
+export interface GlobalComponent {
+  _id?: string
+  name: string
+  description?: string
+  block: Block          // the underlying block (type + props + slot etc.)
+  createdAt?: string
+  updatedAt?: string
+  createdBy?: string
+}
+
 // ─── Page Templates ────────────────────────────────────────────────────────────
 
 export interface PageTemplate {

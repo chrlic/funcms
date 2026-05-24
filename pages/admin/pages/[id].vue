@@ -747,7 +747,12 @@ async function saveAsTemplate() {
           <!-- Page-level custom CSS -->
           <div>
             <label class="block text-xs font-medium text-gray-500 mb-1">Custom CSS <span class="normal-case font-normal text-gray-400">(scoped to this page)</span></label>
-            <CssHintPanel :groups="pageCssHints" />
+            <CssHintPanel :groups="pageCssHints" @insert="(s) => {
+              const current = (page.style?.customCss ?? '').trimEnd()
+              const next = current ? current + '\n\n' + s : s
+              page.style = { ...page.style, customCss: next }
+              isDirty.value = true
+            }" />
             <textarea
               :value="page.style?.customCss ?? ''"
               rows="6"

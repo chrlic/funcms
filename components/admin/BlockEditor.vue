@@ -55,10 +55,36 @@ const summary = computed(() => {
 // Media picker state — one picker open at a time, keyed by field name
 const pickerField = ref<string | null>(null)
 
+// Global components list — only needed when block type is 'global'
+const isGlobalBlock = computed(() => props.block.type === 'global')
+const globalComponents = ref<{ _id: string; name: string }[]>([])
+
+watch(isGlobalBlock, async (v) => {
+  if (!v) return
+  try {
+    const res = await $fetch<{ data: { _id: string; name: string }[] }>('/api/global-components')
+    globalComponents.value = res.data ?? []
+  } catch {}
+}, { immediate: true })
+
 // Per-block CSS editor toggle
 const cssOpen = ref(false)
 const blockScope = computed(() => `.block-${props.block.id}`)
 const hints = computed(() => getBlockHints(props.block.type))
+const cssTextarea = ref<HTMLTextAreaElement | null>(null)
+
+function insertCssSnippet(snippet: string) {
+  cssOpen.value = true
+  const current = (block.customCss ?? '').trimEnd()
+  const next = current ? current + '\n\n' + snippet : snippet
+  emit('update', { ...props.block, customCss: next })
+  nextTick(() => {
+    if (cssTextarea.value) {
+      cssTextarea.value.value = next
+      cssTextarea.value.scrollTop = cssTextarea.value.scrollHeight
+    }
+  })
+}
 </script>
 
 <template>
@@ -120,6 +146,22 @@ const hints = computed(() => getBlockHints(props.block.type))
             <input type="color" :value="localProps[key] as string ?? fieldSchema.default as string ?? '#6366f1'" class="w-10 h-10 rounded border cursor-pointer" @input="onField(key, ($event.target as HTMLInputElement).value)" />
             <input :value="localProps[key] as string ?? fieldSchema.default as string ?? ''" type="text" class="flex-1 border rounded-lg px-3 py-2 text-sm dark:bg-gray-800 dark:border-gray-600 dark:text-white font-mono" @input="onField(key, ($event.target as HTMLInputElement).value)" />
           </div>
+          <div v-else-if="fieldSchema.type === 'global-component'">
+            <select
+              :value="localProps[key] as string ?? ''"
+              class="w-full border rounded-lg px-3 py-2 text-sm dark:bg-gray-800 dark:border-gray-600 dark:text-white"
+              @change="onField(key, ($event.target as HTMLSelectElement).value)"
+            >
+              <option value="">— Select a global component —</option>
+              <option v-for="gc in globalComponents" :key="gc._id" :value="gc._id">{{ gc.name }}</option>
+            </select>
+            <p v-if="globalComponents.length === 0" class="mt-1 text-xs text-gray-400">
+              No global components yet.
+              <NuxtLink to="/admin/global-components" class="text-indigo-500 hover:underline">Create one →</NuxtLink>
+            </p>
+            <p v-else-if="!localProps[key]" class="mt-1 text-xs text-gray-400">Pick a global component above.</p>
+            <NuxtLink v-else :to="`/admin/global-components`" class="mt-1 block text-xs text-indigo-500 hover:underline">Edit global components →</NuxtLink>
+          </div>
           <div v-else-if="fieldSchema.type === 'image'" class="space-y-2">
             <div class="flex gap-2">
               <input :value="localProps[key] as string ?? ''" type="url" placeholder="https://… or /uploads/…" class="flex-1 min-w-0 border rounded-lg px-3 py-2 text-sm dark:bg-gray-800 dark:border-gray-600 dark:text-white" @input="onField(key, ($event.target as HTMLInputElement).value)" />
@@ -156,8 +198,9 @@ const hints = computed(() => getBlockHints(props.block.type))
           </button>
           <div v-if="cssOpen" class="mt-2 space-y-2">
             <p class="text-xs text-gray-400">Scoped to <code class="font-mono">.block-{{ block.id }}</code></p>
-            <CssHintPanel v-if="hints.length" :groups="hints" :scope="blockScope" />
+            <CssHintPanel v-if="hints.length" :groups="hints" :scope="blockScope" @insert="insertCssSnippet" />
             <textarea
+              ref="cssTextarea"
               :value="block.customCss ?? ''"
               rows="5"
               placeholder="color: red;&#10;padding: 2rem;&#10;/* or full rules: */&#10;.block-{{ block.id }} h2 { font-size: 2rem; }"

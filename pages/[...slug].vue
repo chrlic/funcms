@@ -127,8 +127,13 @@ const allCss = computed(() => {
   if (page.value?.style?.customCss?.trim()) parts.push(page.value.style.customCss)
   // Per-block CSS scoped to block wrapper
   for (const block of page.value?.blocks ?? []) {
-    if (block.customCss?.trim()) {
-      parts.push(`.block-${block.id} { ${block.customCss} }`)
+    const css = block.customCss?.trim()
+    if (!css) continue
+    // If the CSS contains a rule block, inject as-is; otherwise wrap in the block scope
+    if (css.includes('{')) {
+      parts.push(css)
+    } else {
+      parts.push(`.block-${block.id} { ${css} }`)
     }
   }
   return parts.join('\n')

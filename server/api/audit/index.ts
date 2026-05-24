@@ -210,6 +210,8 @@ export default defineEventHandler(async (event) => {
       if (href.startsWith('http://') || href.startsWith('https://')) {
         externalLinks.push({ href, source, ...ref })
       } else if (href.startsWith('/')) {
+        // Skip API paths and static asset paths — these are not page slugs
+        if (href.startsWith('/api/') || href.startsWith('/_nuxt/') || href.startsWith('/uploads/')) continue
         internalLinks.push({ href, source, ...ref })
       }
     }
