@@ -327,6 +327,70 @@ function clonePreviewSlug() {
   const stripped = page.value.slug.replace(/^\/[a-z]{2}(?:-[a-zA-Z]{2,4})?\//i, '/')
   return `/${cloneLocale.value}${stripped}`
 }
+
+// ─── Save as template ─────────────────────────────────────────────────────────
+
+const showSaveTemplate = ref(false)
+const templateName = ref('')
+const templateDescription = ref('')
+const savingTemplate = ref(false)
+const saveTemplateError = ref('')
+const saveTemplateSuccess = ref(false)
+
+function openSaveTemplate() {
+  templateName.value = page.value?.title ?? ''
+  templateDescription.value = ''
+  saveTemplateError.value = ''
+  saveTemplateSuccess.value = false
+  showSaveTemplate.value = true
+}
+
+// ─── Responsive preview ───────────────────────────────────────────────────────
+
+const showPreview = ref(false)
+type Viewport = 'mobile' | 'tablet' | 'desktop'
+const previewViewport = ref<Viewport>('desktop')
+
+const viewportWidths: Record<Viewport, string> = {
+  mobile:  '390px',
+  tablet:  '768px',
+  desktop: '100%',
+}
+
+const previewUrl = computed(() => {
+  if (!page.value) return ''
+  const sid = session.sessionId ? `&sid=${session.sessionId}` : ''
+  // For locale variants, prepend the locale code to the slug path
+  const slug = activeLocale.value
+    ? `/${activeLocale.value}${page.value.slug.replace(/^\/[a-z]{2}(?:-[a-zA-Z]{2,4})?\//i, '/')}`
+    : page.value.slug
+  return `${slug}?preview=1${sid}`
+})
+
+// ─── Save as template ─────────────────────────────────────────────────────────
+
+async function saveAsTemplate() {
+  if (!page.value) return
+  savingTemplate.value = true
+  saveTemplateError.value = ''
+  try {
+    await $fetch('/api/templates', {
+      method: 'POST',
+      body: {
+        name: templateName.value,
+        description: templateDescription.value,
+        layout: page.value.layout,
+        blocks: variant.value.blocks.map(b => ({ ...b, id: crypto.randomUUID() })),
+      },
+    })
+    saveTemplateSuccess.value = true
+    setTimeout(() => { showSaveTemplate.value = false; saveTemplateSuccess.value = false }, 1500)
+  } catch (e: unknown) {
+    saveTemplateError.value = (e as { data?: { statusMessage?: string } })?.data?.statusMessage ?? 'Failed to save template'
+  } finally {
+    savingTemplate.value = false
+  }
+}
 </script>
 
 <template>
@@ -345,10 +409,14 @@ function clonePreviewSlug() {
         ]">{{ page.status }}</span>
       </div>
       <div class="flex items-center gap-3">
-        <a :href="`${page.slug}?preview=1${session.sessionId ? '&sid=' + session.sessionId : ''}`" target="_blank" class="text-sm text-gray-500 hover:text-indigo-600 flex items-center gap-1">
-          <svg class="w-4 h-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M4.25 5.5a.75.75 0 0 0-.75.75v8.5c0 .414.336.75.75.75h8.5a.75.75 0 0 0 .75-.75v-4a.75.75 0 0 1 1.5 0v4A2.25 2.25 0 0 1 12.75 17h-8.5A2.25 2.25 0 0 1 2 14.75v-8.5A2.25 2.25 0 0 1 4.25 4h5a.75.75 0 0 1 0 1.5h-5Z" clip-rule="evenodd"/><path fill-rule="evenodd" d="M6.194 12.753a.75.75 0 0 0 1.06.053L16.5 4.44v2.81a.75.75 0 0 0 1.5 0v-4.5a.75.75 0 0 0-.75-.75h-4.5a.75.75 0 0 0 0 1.5h2.553l-9.056 8.194a.75.75 0 0 0-.053 1.06Z" clip-rule="evenodd"/></svg>
+        <!-- Preview toggle -->
+        <button
+          @click="showPreview = !showPreview"
+          :class="['text-sm flex items-center gap-1 px-3 py-1.5 rounded-lg border transition', showPreview ? 'bg-indigo-600 border-indigo-600 text-white' : 'border-gray-200 dark:border-gray-600 text-gray-500 hover:text-indigo-600 hover:border-indigo-300']"
+        >
+          <svg class="w-4 h-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"><path d="M10 12.5a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5Z"/><path fill-rule="evenodd" d="M.664 10.59a1.651 1.651 0 0 1 0-1.186A10.004 10.004 0 0 1 10 3c4.257 0 7.893 2.66 9.336 6.41.147.381.146.804 0 1.186A10.004 10.004 0 0 1 10 17c-4.257 0-7.893-2.66-9.336-6.41ZM14 10a4 4 0 1 1-8 0 4 4 0 0 1 8 0Z" clip-rule="evenodd"/></svg>
           Preview
-        </a>
+        </button>
         <button @click="loadHistory" class="text-sm text-gray-500 hover:text-indigo-600 flex items-center gap-1">
           <svg class="w-4 h-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M10 18a8 8 0 1 0 0-16 8 8 0 0 0 0 16Zm.75-13a.75.75 0 0 0-1.5 0v5c0 .414.336.75.75.75h4a.75.75 0 0 0 0-1.5h-3.25V5Z" clip-rule="evenodd"/></svg>
           History
@@ -356,6 +424,10 @@ function clonePreviewSlug() {
         <button v-if="locales.length > 0" @click="openClone" class="text-sm text-gray-500 hover:text-indigo-600 flex items-center gap-1" title="Clone to locale">
           <svg class="w-4 h-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"><path d="M7 3.5A1.5 1.5 0 0 1 8.5 2h3.879a1.5 1.5 0 0 1 1.06.44l3.122 3.12A1.5 1.5 0 0 1 17 6.622V12.5a1.5 1.5 0 0 1-1.5 1.5h-1v-3.379a3 3 0 0 0-.879-2.121L10.5 5.379A3 3 0 0 0 8.379 4.5H7v-1Z"/><path d="M4.5 6A1.5 1.5 0 0 0 3 7.5v9A1.5 1.5 0 0 0 4.5 18h7a1.5 1.5 0 0 0 1.5-1.5v-5.879a1.5 1.5 0 0 0-.44-1.06L9.44 6.439A1.5 1.5 0 0 0 8.378 6H4.5Z"/></svg>
           Clone to locale
+        </button>
+        <button @click="openSaveTemplate" class="text-sm text-gray-500 hover:text-indigo-600 flex items-center gap-1" title="Save as template">
+          <svg class="w-4 h-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M4.5 2A1.5 1.5 0 0 0 3 3.5v13A1.5 1.5 0 0 0 4.5 18h11a1.5 1.5 0 0 0 1.5-1.5V7.621a1.5 1.5 0 0 0-.44-1.06l-4.12-4.122A1.5 1.5 0 0 0 11.378 2H4.5Zm2.25 8.5a.75.75 0 0 0 0 1.5h6.5a.75.75 0 0 0 0-1.5h-6.5Zm0 3a.75.75 0 0 0 0 1.5h6.5a.75.75 0 0 0 0-1.5h-6.5Zm0-6a.75.75 0 0 0 0 1.5h3a.75.75 0 0 0 0-1.5h-3Z" clip-rule="evenodd"/></svg>
+          Save as template
         </button>
         <button
           @click="save"
@@ -406,6 +478,52 @@ function clonePreviewSlug() {
           {{ v.status }}
         </span>
       </button>
+    </div>
+
+    <!-- Responsive preview panel -->
+    <div v-if="showPreview" class="mb-6">
+      <!-- Viewport picker bar -->
+      <div class="flex items-center gap-2 mb-3">
+        <div class="flex items-center bg-gray-100 dark:bg-gray-800 rounded-lg p-0.5 gap-0.5">
+          <button
+            v-for="vp in (['mobile', 'tablet', 'desktop'] as Viewport[])"
+            :key="vp"
+            @click="previewViewport = vp"
+            :class="['px-3 py-1.5 rounded-md text-xs font-medium transition flex items-center gap-1.5', previewViewport === vp ? 'bg-white dark:bg-gray-700 shadow-sm text-indigo-600 dark:text-indigo-400' : 'text-gray-500 hover:text-gray-700 dark:hover:text-gray-300']"
+          >
+            <!-- Mobile icon -->
+            <svg v-if="vp === 'mobile'" class="w-3.5 h-3.5" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"><path d="M8 16.25a.75.75 0 0 1 .75-.75h2.5a.75.75 0 0 1 0 1.5h-2.5a.75.75 0 0 1-.75-.75Z"/><path fill-rule="evenodd" d="M4 4a3 3 0 0 1 3-3h6a3 3 0 0 1 3 3v12a3 3 0 0 1-3 3H7a3 3 0 0 1-3-3V4Zm3-1.5h6A1.5 1.5 0 0 1 14.5 4v12A1.5 1.5 0 0 1 13 17.5H7A1.5 1.5 0 0 1 5.5 16V4A1.5 1.5 0 0 1 7 2.5Z" clip-rule="evenodd"/></svg>
+            <!-- Tablet icon -->
+            <svg v-else-if="vp === 'tablet'" class="w-3.5 h-3.5" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"><path d="M10.5 14.5a.5.5 0 1 1-1 0 .5.5 0 0 1 1 0Z"/><path fill-rule="evenodd" d="M2 5.5A2.5 2.5 0 0 1 4.5 3h11A2.5 2.5 0 0 1 18 5.5v9a2.5 2.5 0 0 1-2.5 2.5h-11A2.5 2.5 0 0 1 2 14.5v-9Zm2.5-1h11A1 1 0 0 1 16.5 5.5v9a1 1 0 0 1-1 1h-11a1 1 0 0 1-1-1v-9a1 1 0 0 1 1-1Z" clip-rule="evenodd"/></svg>
+            <!-- Desktop icon -->
+            <svg v-else class="w-3.5 h-3.5" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M2 4.25A2.25 2.25 0 0 1 4.25 2h11.5A2.25 2.25 0 0 1 18 4.25v8.5A2.25 2.25 0 0 1 15.75 15h-3.105a3.501 3.501 0 0 0 1.1 1.677A.75.75 0 0 1 13.26 18H6.74a.75.75 0 0 1-.484-1.323A3.501 3.501 0 0 0 7.355 15H4.25A2.25 2.25 0 0 1 2 12.75v-8.5Zm1.5 0a.75.75 0 0 1 .75-.75h11.5a.75.75 0 0 1 .75.75v7.5a.75.75 0 0 1-.75.75H4.25a.75.75 0 0 1-.75-.75v-7.5Z" clip-rule="evenodd"/></svg>
+            <span class="capitalize">{{ vp }}</span>
+            <span v-if="vp !== 'desktop'" class="text-gray-400 font-normal">{{ viewportWidths[vp] }}</span>
+          </button>
+        </div>
+        <a
+          :href="previewUrl"
+          target="_blank"
+          class="ml-auto text-xs text-gray-400 hover:text-indigo-600 flex items-center gap-1"
+        >
+          <svg class="w-3.5 h-3.5" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M4.25 5.5a.75.75 0 0 0-.75.75v8.5c0 .414.336.75.75.75h8.5a.75.75 0 0 0 .75-.75v-4a.75.75 0 0 1 1.5 0v4A2.25 2.25 0 0 1 12.75 17h-8.5A2.25 2.25 0 0 1 2 14.75v-8.5A2.25 2.25 0 0 1 4.25 4h5a.75.75 0 0 1 0 1.5h-5Z" clip-rule="evenodd"/><path fill-rule="evenodd" d="M6.194 12.753a.75.75 0 0 0 1.06.053L16.5 4.44v2.81a.75.75 0 0 0 1.5 0v-4.5a.75.75 0 0 0-.75-.75h-4.5a.75.75 0 0 0 0 1.5h2.553l-9.056 8.194a.75.75 0 0 0-.053 1.06Z" clip-rule="evenodd"/></svg>
+          Open in new tab
+        </a>
+      </div>
+      <!-- Iframe container -->
+      <div class="bg-gray-200 dark:bg-gray-900 rounded-xl overflow-hidden flex justify-center" style="min-height: 600px">
+        <div
+          class="bg-white transition-all duration-300 shadow-xl overflow-hidden w-full"
+          :style="previewViewport !== 'desktop' ? `max-width: ${viewportWidths[previewViewport]}; border-left: 1px solid #e5e7eb; border-right: 1px solid #e5e7eb` : ''"
+        >
+          <iframe
+            :src="previewUrl"
+            class="w-full"
+            style="height: 80vh; border: none; display: block"
+            :key="previewUrl"
+          />
+        </div>
+      </div>
     </div>
 
     <div class="grid grid-cols-3 gap-6">
@@ -843,6 +961,47 @@ function clonePreviewSlug() {
             </button>
           </div>
         </div>
+      </div>
+    </div>
+
+    <!-- Save as template modal -->
+    <div v-if="showSaveTemplate" class="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4">
+      <div class="bg-white dark:bg-gray-800 rounded-2xl shadow-xl w-full max-w-md p-6">
+        <h2 class="text-lg font-bold mb-1">Save as template</h2>
+        <p class="text-sm text-gray-500 dark:text-gray-400 mb-4">
+          Saves the current layout ({{ page?.layout }}) and {{ variant.blocks.length }} block{{ variant.blocks.length !== 1 ? 's' : '' }} as a reusable template.
+        </p>
+        <form @submit.prevent="saveAsTemplate" class="space-y-4">
+          <div>
+            <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Template name</label>
+            <input
+              v-model="templateName"
+              required
+              autofocus
+              class="w-full border rounded-lg px-3 py-2 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+            />
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Description <span class="text-gray-400 font-normal">(optional)</span></label>
+            <textarea
+              v-model="templateDescription"
+              rows="2"
+              class="w-full border rounded-lg px-3 py-2 text-sm dark:bg-gray-700 dark:border-gray-600 dark:text-white resize-none"
+            />
+          </div>
+          <p v-if="saveTemplateError" class="text-red-500 text-sm">{{ saveTemplateError }}</p>
+          <p v-if="saveTemplateSuccess" class="text-green-600 text-sm font-medium">Template saved!</p>
+          <div class="flex gap-3 justify-end pt-2">
+            <button type="button" @click="showSaveTemplate = false" class="px-4 py-2 text-sm text-gray-600 hover:text-gray-800">Cancel</button>
+            <button
+              type="submit"
+              :disabled="savingTemplate || saveTemplateSuccess"
+              class="px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 disabled:opacity-50"
+            >
+              {{ savingTemplate ? 'Saving…' : saveTemplateSuccess ? 'Saved!' : 'Save template' }}
+            </button>
+          </div>
+        </form>
       </div>
     </div>
   </div>

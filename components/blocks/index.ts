@@ -84,6 +84,10 @@ export const blockSchemas: Record<BlockType, Record<string, PropSchema>> = {
   'media-text': {
     image: { type: 'image', label: 'Image', required: true },
     imageAlt: { type: 'text', label: 'Image Alt Text' },
+    layout: { type: 'select', label: 'Layout', default: 'columns', options: [
+      { label: 'Columns (side-by-side)', value: 'columns' },
+      { label: 'Float (text wraps)', value: 'float' },
+    ]},
     imagePosition: { type: 'select', label: 'Image Side', default: 'left', options: [
       { label: 'Left', value: 'left' },
       { label: 'Right', value: 'right' },
@@ -93,7 +97,7 @@ export const blockSchemas: Record<BlockType, Record<string, PropSchema>> = {
       { label: '1/2', value: 'half' },
       { label: '2/3', value: 'two-thirds' },
     ]},
-    verticalAlign: { type: 'select', label: 'Vertical Align', default: 'center', options: [
+    verticalAlign: { type: 'select', label: 'Vertical Align (columns only)', default: 'center', options: [
       { label: 'Top', value: 'top' },
       { label: 'Center', value: 'center' },
       { label: 'Bottom', value: 'bottom' },

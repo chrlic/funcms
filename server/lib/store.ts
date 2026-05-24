@@ -24,4 +24,5 @@ export const COLLECTION = {
   MEDIA: 'media',
   SETTINGS: 'settings',
   BLOCK_TYPES: 'block-types',
+  TEMPLATES: 'templates',
 } as const

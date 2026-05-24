@@ -108,14 +108,22 @@ export interface Page {
 
 // ─── Media ─────────────────────────────────────────────────────────────────────
 
+export interface FocalPoint {
+  x: number   // 0–1 (left → right)
+  y: number   // 0–1 (top → bottom)
+}
+
 export interface MediaItem {
   _id?: string
   filename: string
   originalName: string
   mimeType: string
   size: number           // bytes
+  width?: number
+  height?: number
   url: string
   alt?: string
+  focalPoint?: FocalPoint
   createdAt?: string
 }
 
@@ -196,6 +204,18 @@ export interface FooterColumn {
   showFrom: 'xs' | 'sm' | 'md' | 'lg' | 'xl'
   /** Largest breakpoint at which this column is visible. Hidden above it. '' = always */
   hideFrom: '' | 'sm' | 'md' | 'lg' | 'xl'
+}
+
+// ─── Page Templates ────────────────────────────────────────────────────────────
+
+export interface PageTemplate {
+  _id?: string
+  name: string
+  description?: string
+  layout: LayoutType
+  blocks: Block[]
+  createdAt?: string
+  createdBy?: string
 }
 
 export interface SiteSettings {

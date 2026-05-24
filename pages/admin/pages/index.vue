@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { Page, SiteSettings, Locale } from '~/types'
+import type { Page, SiteSettings, Locale, PageTemplate } from '~/types'
 
 definePageMeta({ layout: 'admin', middleware: 'admin-auth' })
 
@@ -39,6 +39,13 @@ const { data: settingsData } = await useFetch<{ data: SiteSettings }>('/api/sett
 })
 const locales = computed<Locale[]>(() => settingsData.value?.data?.locales ?? [])
 
+// ─── Templates ────────────────────────────────────────────────────────────────
+
+const { data: templatesData } = await useFetch<{ data: PageTemplate[] }>('/api/templates', {
+  headers, credentials: 'include',
+})
+const templates = computed(() => templatesData.value?.data ?? [])
+
 // ─── Create page ──────────────────────────────────────────────────────────────
 
 const creating = ref(false)
@@ -46,6 +53,22 @@ const newTitle = ref('')
 const newSlug = ref('')
 const showCreate = ref(false)
 const createError = ref('')
+const createStep = ref<'template' | 'details'>('template')
+const selectedTemplate = ref<PageTemplate | null>(null)
+
+function openCreate() {
+  createStep.value = templates.value.length > 0 ? 'template' : 'details'
+  selectedTemplate.value = null
+  newTitle.value = ''
+  newSlug.value = ''
+  createError.value = ''
+  showCreate.value = true
+}
+
+function pickTemplate(t: PageTemplate | null) {
+  selectedTemplate.value = t
+  createStep.value = 'details'
+}
 
 watch(newTitle, (v) => {
   if (!v) { newSlug.value = ''; return }
@@ -59,10 +82,12 @@ async function createPage() {
   creating.value = true
   createError.value = ''
   try {
-    const result = await $fetch<{ data: Page }>('/api/pages', {
-      method: 'POST',
-      body: { title: newTitle.value, slug: newSlug.value, status: 'draft' },
-    })
+    const body: Record<string, unknown> = { title: newTitle.value, slug: newSlug.value, status: 'draft' }
+    if (selectedTemplate.value) {
+      body.layout = selectedTemplate.value.layout
+      body.blocks = selectedTemplate.value.blocks.map(b => ({ ...b, id: crypto.randomUUID() }))
+    }
+    const result = await $fetch<{ data: Page }>('/api/pages', { method: 'POST', body })
     showCreate.value = false
     newTitle.value = ''
     newSlug.value = ''
@@ -144,7 +169,7 @@ const statusColors: Record<string, string> = {
     <div class="flex items-center justify-between mb-6">
       <h1 class="text-2xl font-bold">Pages</h1>
       <button
-        @click="showCreate = true"
+        @click="openCreate"
         class="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 transition"
       >
         <svg class="w-4 h-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"><path d="M10.75 4.75a.75.75 0 0 0-1.5 0v4.5h-4.5a.75.75 0 0 0 0 1.5h4.5v4.5a.75.75 0 0 0 1.5 0v-4.5h4.5a.75.75 0 0 0 0-1.5h-4.5v-4.5Z"/></svg>
@@ -306,38 +331,95 @@ const statusColors: Record<string, string> = {
 
     <!-- Create modal -->
     <div v-if="showCreate" class="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4">
-      <div class="bg-white dark:bg-gray-800 rounded-2xl shadow-xl w-full max-w-md p-6">
-        <h2 class="text-lg font-bold mb-4">New Page</h2>
-        <form @submit.prevent="createPage" class="space-y-4">
-          <div>
-            <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Title</label>
-            <input
-              v-model="newTitle"
-              required
-              autofocus
-              class="w-full border rounded-lg px-3 py-2 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
-            />
-          </div>
-          <div>
-            <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Slug</label>
-            <input
-              v-model="newSlug"
-              required
-              class="w-full border rounded-lg px-3 py-2 font-mono text-sm dark:bg-gray-700 dark:border-gray-600 dark:text-white"
-            />
-          </div>
-          <p v-if="createError" class="text-red-500 text-sm">{{ createError }}</p>
-          <div class="flex gap-3 justify-end pt-2">
-            <button type="button" @click="showCreate = false" class="px-4 py-2 text-sm text-gray-600 hover:text-gray-800">Cancel</button>
-            <button
-              type="submit"
-              :disabled="creating"
-              class="px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 disabled:opacity-50"
-            >
-              {{ creating ? 'Creating…' : 'Create' }}
+      <div class="bg-white dark:bg-gray-800 rounded-2xl shadow-xl w-full p-6" :class="createStep === 'template' ? 'max-w-2xl' : 'max-w-md'">
+
+        <!-- Step 1: Template picker -->
+        <template v-if="createStep === 'template'">
+          <div class="flex items-center justify-between mb-5">
+            <h2 class="text-lg font-bold">Choose a template</h2>
+            <button @click="showCreate = false" class="text-gray-400 hover:text-gray-600">
+              <svg class="w-5 h-5" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"><path d="M6.28 5.22a.75.75 0 0 0-1.06 1.06L8.94 10l-3.72 3.72a.75.75 0 1 0 1.06 1.06L10 11.06l3.72 3.72a.75.75 0 1 0 1.06-1.06L11.06 10l3.72-3.72a.75.75 0 0 0-1.06-1.06L10 8.94 6.28 5.22Z"/></svg>
             </button>
           </div>
-        </form>
+          <div class="grid grid-cols-2 sm:grid-cols-3 gap-3">
+            <!-- Blank page -->
+            <button
+              @click="pickTemplate(null)"
+              class="group flex flex-col items-center gap-2 p-4 border-2 border-dashed border-gray-200 dark:border-gray-600 rounded-xl hover:border-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 transition text-center"
+            >
+              <div class="w-12 h-12 rounded-lg bg-gray-100 dark:bg-gray-700 flex items-center justify-center group-hover:bg-indigo-100 dark:group-hover:bg-indigo-900/40 transition">
+                <svg class="w-6 h-6 text-gray-400 group-hover:text-indigo-500 transition" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"><path d="M10.75 4.75a.75.75 0 0 0-1.5 0v4.5h-4.5a.75.75 0 0 0 0 1.5h4.5v4.5a.75.75 0 0 0 1.5 0v-4.5h4.5a.75.75 0 0 0 0-1.5h-4.5v-4.5Z"/></svg>
+              </div>
+              <span class="text-sm font-medium text-gray-700 dark:text-gray-200">Blank page</span>
+              <span class="text-xs text-gray-400">Start from scratch</span>
+            </button>
+            <!-- Template cards -->
+            <button
+              v-for="t in templates"
+              :key="t._id"
+              @click="pickTemplate(t)"
+              class="group flex flex-col items-center gap-2 p-4 border-2 border-gray-200 dark:border-gray-600 rounded-xl hover:border-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-900/20 transition text-center"
+            >
+              <div class="w-12 h-12 rounded-lg bg-indigo-50 dark:bg-indigo-900/30 flex items-center justify-center group-hover:bg-indigo-100 dark:group-hover:bg-indigo-900/50 transition">
+                <svg class="w-6 h-6 text-indigo-400 group-hover:text-indigo-600 transition" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M4.5 2A1.5 1.5 0 0 0 3 3.5v13A1.5 1.5 0 0 0 4.5 18h11a1.5 1.5 0 0 0 1.5-1.5V7.621a1.5 1.5 0 0 0-.44-1.06l-4.12-4.122A1.5 1.5 0 0 0 11.378 2H4.5Zm2.25 8.5a.75.75 0 0 0 0 1.5h6.5a.75.75 0 0 0 0-1.5h-6.5Zm0 3a.75.75 0 0 0 0 1.5h6.5a.75.75 0 0 0 0-1.5h-6.5Zm0-6a.75.75 0 0 0 0 1.5h3a.75.75 0 0 0 0-1.5h-3Z" clip-rule="evenodd"/></svg>
+              </div>
+              <span class="text-sm font-medium text-gray-700 dark:text-gray-200">{{ t.name }}</span>
+              <span class="text-xs text-gray-400">{{ t.blocks.length }} block{{ t.blocks.length !== 1 ? 's' : '' }} · {{ t.layout }}</span>
+            </button>
+          </div>
+        </template>
+
+        <!-- Step 2: Page details -->
+        <template v-else>
+          <div class="flex items-center gap-3 mb-5">
+            <button
+              v-if="templates.length > 0"
+              @click="createStep = 'template'"
+              class="text-gray-400 hover:text-gray-600 transition"
+            >
+              <svg class="w-5 h-5" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M11.78 5.22a.75.75 0 0 1 0 1.06L8.06 10l3.72 3.72a.75.75 0 1 1-1.06 1.06l-4.25-4.25a.75.75 0 0 1 0-1.06l4.25-4.25a.75.75 0 0 1 1.06 0Z" clip-rule="evenodd"/></svg>
+            </button>
+            <h2 class="text-lg font-bold flex-1">New Page</h2>
+            <button @click="showCreate = false" class="text-gray-400 hover:text-gray-600">
+              <svg class="w-5 h-5" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"><path d="M6.28 5.22a.75.75 0 0 0-1.06 1.06L8.94 10l-3.72 3.72a.75.75 0 1 0 1.06 1.06L10 11.06l3.72 3.72a.75.75 0 1 0 1.06-1.06L11.06 10l3.72-3.72a.75.75 0 0 0-1.06-1.06L10 8.94 6.28 5.22Z"/></svg>
+            </button>
+          </div>
+          <div v-if="selectedTemplate" class="flex items-center gap-2 mb-4 px-3 py-2 bg-indigo-50 dark:bg-indigo-900/30 rounded-lg text-sm text-indigo-700 dark:text-indigo-300">
+            <svg class="w-4 h-4 flex-shrink-0" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M4.5 2A1.5 1.5 0 0 0 3 3.5v13A1.5 1.5 0 0 0 4.5 18h11a1.5 1.5 0 0 0 1.5-1.5V7.621a1.5 1.5 0 0 0-.44-1.06l-4.12-4.122A1.5 1.5 0 0 0 11.378 2H4.5Z" clip-rule="evenodd"/></svg>
+            Template: <strong>{{ selectedTemplate.name }}</strong>
+          </div>
+          <form @submit.prevent="createPage" class="space-y-4">
+            <div>
+              <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Title</label>
+              <input
+                v-model="newTitle"
+                required
+                autofocus
+                class="w-full border rounded-lg px-3 py-2 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+              />
+            </div>
+            <div>
+              <label class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Slug</label>
+              <input
+                v-model="newSlug"
+                required
+                class="w-full border rounded-lg px-3 py-2 font-mono text-sm dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+              />
+            </div>
+            <p v-if="createError" class="text-red-500 text-sm">{{ createError }}</p>
+            <div class="flex gap-3 justify-end pt-2">
+              <button type="button" @click="showCreate = false" class="px-4 py-2 text-sm text-gray-600 hover:text-gray-800">Cancel</button>
+              <button
+                type="submit"
+                :disabled="creating"
+                class="px-4 py-2 bg-indigo-600 text-white text-sm font-medium rounded-lg hover:bg-indigo-700 disabled:opacity-50"
+              >
+                {{ creating ? 'Creating…' : 'Create' }}
+              </button>
+            </div>
+          </form>
+        </template>
+
       </div>
     </div>
   </div>

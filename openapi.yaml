@@ -133,6 +133,13 @@ components:
 
     # ─── Media ─────────────────────────────────────────────────────────────────
 
+    FocalPoint:
+      type: object
+      required: [x, y]
+      properties:
+        x: { type: number, minimum: 0, maximum: 1, description: "0=left, 1=right" }
+        y: { type: number, minimum: 0, maximum: 1, description: "0=top, 1=bottom" }
+
     MediaItem:
       type: object
       properties:
@@ -141,8 +148,11 @@ components:
         originalName: { type: string }
         mimeType:     { type: string }
         size:         { type: integer, description: "Bytes" }
+        width:        { type: integer, description: "Pixel width (images only)" }
+        height:       { type: integer, description: "Pixel height (images only)" }
         url:          { type: string, description: "Relative URL: /api/media/files/{filename}" }
         alt:          { type: string }
+        focalPoint:   { $ref: '#/components/schemas/FocalPoint' }
         createdAt:    { type: string, format: date-time }
 
     # ─── Settings ──────────────────────────────────────────────────────────────
@@ -408,6 +418,18 @@ components:
         edges:         { type: array, items: { $ref: '#/components/schemas/SiteMapEdge' } }
         localeCodes:   { type: array, items: { type: string } }
         defaultLocale: { type: string }
+
+    PageTemplate:
+      type: object
+      required: [name, layout, blocks]
+      properties:
+        _id:         { type: string, format: uuid }
+        name:        { type: string }
+        description: { type: string }
+        layout:      { type: string, enum: [full-width, sidebar-left, sidebar-right, landing, blank] }
+        blocks:      { type: array, items: { $ref: '#/components/schemas/Block' } }
+        createdAt:   { type: string, format: date-time }
+        createdBy:   { type: string, format: email }
 
 security:
   - cookieAuth: []
@@ -1035,11 +1057,48 @@ paths:
 
     get:
       summary: Get media item metadata
-      description: Returns the media record. Requires editor role.
+      description: Returns the media record. Pass `?usage=1` to include a list of pages that reference this file.
       tags: [Media]
+      parameters:
+        - name: usage
+          in: query
+          schema: { type: string, enum: ['0', '1'] }
+          description: Pass '1' to scan pages for references to this file
       responses:
         '200':
           description: Media item
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: '#/components/schemas/MediaItem' }
+                  usedIn:
+                    type: array
+                    description: Only present when usage=1
+                    items:
+                      type: object
+                      properties:
+                        id:    { type: string }
+                        title: { type: string }
+                        slug:  { type: string }
+        '404': { description: Not found }
+
+    patch:
+      summary: Update media metadata (alt text, focal point)
+      tags: [Media]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                alt:        { type: string }
+                focalPoint: { $ref: '#/components/schemas/FocalPoint' }
+      responses:
+        '200':
+          description: Updated
           content:
             application/json:
               schema:
@@ -1468,3 +1527,129 @@ paths:
                   data: { $ref: '#/components/schemas/SiteMapData' }
         '401': { description: Not authenticated }
         '403': { description: Insufficient role (editor+ required) }
+
+  # ── Templates ─────────────────────────────────────────────────────────────────
+
+  /templates:
+    get:
+      summary: List templates
+      description: Returns all page templates sorted by creation date descending.
+      tags: [Templates]
+      security:
+        - cookieAuth: []
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Template list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { type: array, items: { $ref: '#/components/schemas/PageTemplate' } }
+        '401': { description: Not authenticated }
+        '403': { description: Insufficient role (editor+ required) }
+    post:
+      summary: Create template
+      description: Creates a new page template.
+      tags: [Templates]
+      security:
+        - cookieAuth: []
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name:        { type: string }
+                description: { type: string }
+                layout:      { type: string, enum: [full-width, sidebar-left, sidebar-right, landing, blank] }
+                blocks:      { type: array, items: { $ref: '#/components/schemas/Block' } }
+      responses:
+        '201':
+          description: Template created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: '#/components/schemas/PageTemplate' }
+        '400': { description: Name is required }
+        '401': { description: Not authenticated }
+        '403': { description: Insufficient role (editor+ required) }
+
+  /templates/{id}:
+    parameters:
+      - in: path
+        name: id
+        required: true
+        schema: { type: string, format: uuid }
+    get:
+      summary: Get template
+      tags: [Templates]
+      security:
+        - cookieAuth: []
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Template record
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: '#/components/schemas/PageTemplate' }
+        '401': { description: Not authenticated }
+        '403': { description: Insufficient role (editor+ required) }
+        '404': { description: Not found }
+    patch:
+      summary: Update template
+      description: Updates name, description, layout, and/or blocks.
+      tags: [Templates]
+      security:
+        - cookieAuth: []
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name:        { type: string }
+                description: { type: string }
+                layout:      { type: string, enum: [full-width, sidebar-left, sidebar-right, landing, blank] }
+                blocks:      { type: array, items: { $ref: '#/components/schemas/Block' } }
+      responses:
+        '200':
+          description: Updated template
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: '#/components/schemas/PageTemplate' }
+        '401': { description: Not authenticated }
+        '403': { description: Insufficient role (editor+ required) }
+        '404': { description: Not found }
+    delete:
+      summary: Delete template
+      tags: [Templates]
+      security:
+        - cookieAuth: []
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Deleted
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message: { type: string }
+        '401': { description: Not authenticated }
+        '403': { description: Insufficient role (editor+ required) }
+        '404': { description: Not found }
