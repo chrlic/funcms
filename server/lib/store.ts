@@ -26,4 +26,5 @@ export const COLLECTION = {
   BLOCK_TYPES: 'block-types',
   TEMPLATES: 'templates',
   GLOBAL_COMPONENTS: 'global-components',
+  BLOCK_PRESETS: 'block-presets',
 } as const

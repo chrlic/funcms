@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { blockSchemas } from '~/components/blocks/index'
-import type { Block, CustomBlockField } from '~/types'
+import type { Block, BlockPreset, CustomBlockField } from '~/types'
 import type { PropSchema } from '~/components/blocks/index'
 import { getBlockHints } from '~/composables/useCssHints'
 
@@ -38,7 +38,13 @@ function onField(key: string, value: unknown) {
   emit('update', { ...props.block, props: { ...localProps.value } })
 }
 
-watch(() => props.block.id, () => { localProps.value = { ...props.block.props } })
+watch(() => props.block.id, () => {
+  localProps.value = { ...props.block.props }
+  presets.value = []
+  presetsLoaded.value = false
+  showPresetMenu.value = false
+  showSavePreset.value = false
+})
 
 function getSelectOptions(schema: PropSchema) { return schema.options ?? [] }
 
@@ -67,7 +73,60 @@ watch(isGlobalBlock, async (v) => {
   } catch {}
 }, { immediate: true })
 
-// Per-block CSS editor toggle
+// ─── Block presets ────────────────────────────────────────────────────────────
+
+const presets = ref<BlockPreset[]>([])
+const presetsLoaded = ref(false)
+const showPresetMenu = ref(false)
+const showSavePreset = ref(false)
+const presetName = ref('')
+const savingPreset = ref(false)
+
+async function loadPresets() {
+  if (presetsLoaded.value) return
+  try {
+    const res = await $fetch<{ data: BlockPreset[] }>('/api/block-presets', {
+      query: { blockType: props.block.type },
+    })
+    presets.value = res.data ?? []
+  } catch {}
+  presetsLoaded.value = true
+}
+
+async function savePreset() {
+  if (!presetName.value.trim()) return
+  savingPreset.value = true
+  try {
+    const res = await $fetch<{ data: BlockPreset }>('/api/block-presets', {
+      method: 'POST',
+      body: {
+        name: presetName.value.trim(),
+        blockType: props.block.type,
+        props: { ...props.block.props },
+        customCss: props.block.customCss ?? '',
+      },
+    })
+    presets.value = [...presets.value, res.data]
+    showSavePreset.value = false
+    presetName.value = ''
+  } catch {}
+  savingPreset.value = false
+}
+
+function applyPreset(preset: BlockPreset) {
+  localProps.value = { ...preset.props }
+  emit('update', { ...props.block, props: { ...preset.props }, customCss: preset.customCss ?? props.block.customCss })
+  showPresetMenu.value = false
+}
+
+async function deletePreset(preset: BlockPreset, e: MouseEvent) {
+  e.stopPropagation()
+  if (!confirm(`Delete preset "${preset.name}"?`)) return
+  await $fetch(`/api/block-presets/${preset._id}`, { method: 'DELETE' })
+  presets.value = presets.value.filter(p => p._id !== preset._id)
+}
+
+// ─── Per-block CSS editor toggle ─────────────────────────────────────────────
 const cssOpen = ref(false)
 const blockScope = computed(() => `.block-${props.block.id}`)
 const hints = computed(() => getBlockHints(props.block.type))
@@ -117,10 +176,70 @@ function insertCssSnippet(snippet: string) {
         <button @click.stop="emit('moveDown')" title="Move down" class="p-1.5 rounded hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-400 transition">
           <svg class="w-4 h-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M5.22 8.22a.75.75 0 0 1 1.06 0L10 11.94l3.72-3.72a.75.75 0 1 1 1.06 1.06l-4.25 4.25a.75.75 0 0 1-1.06 0L5.22 9.28a.75.75 0 0 1 0-1.06Z" clip-rule="evenodd"/></svg>
         </button>
+        <!-- Preset: save -->
+        <button
+          @click.stop="showSavePreset = !showSavePreset; presetName = ''"
+          title="Save as preset"
+          class="p-1.5 rounded hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-400 hover:text-amber-500 transition"
+        >
+          <svg class="w-4 h-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"><path d="M10.75 2.75a.75.75 0 0 0-1.5 0v8.614L6.295 8.235a.75.75 0 1 0-1.09 1.03l4.25 4.5a.75.75 0 0 0 1.09 0l4.25-4.5a.75.75 0 0 0-1.09-1.03l-2.955 3.129V2.75Z"/><path d="M3.5 12.75a.75.75 0 0 0-1.5 0v2.5A2.75 2.75 0 0 0 4.75 18h10.5A2.75 2.75 0 0 0 18 15.25v-2.5a.75.75 0 0 0-1.5 0v2.5c0 .69-.56 1.25-1.25 1.25H4.75c-.69 0-1.25-.56-1.25-1.25v-2.5Z"/></svg>
+        </button>
+        <!-- Preset: load -->
+        <div class="relative">
+          <button
+            @click.stop="showPresetMenu = !showPresetMenu; if (showPresetMenu) loadPresets()"
+            title="Load preset"
+            class="p-1.5 rounded hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-400 hover:text-indigo-500 transition"
+          >
+            <svg class="w-4 h-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M4.5 2A1.5 1.5 0 0 0 3 3.5v13A1.5 1.5 0 0 0 4.5 18h11a1.5 1.5 0 0 0 1.5-1.5V7.621a1.5 1.5 0 0 0-.44-1.06l-4.12-4.122A1.5 1.5 0 0 0 11.378 2H4.5Zm2.25 8.5a.75.75 0 0 0 0 1.5h6.5a.75.75 0 0 0 0-1.5h-6.5Zm0 3a.75.75 0 0 0 0 1.5h6.5a.75.75 0 0 0 0-1.5h-6.5Zm0-6a.75.75 0 0 0 0 1.5h3a.75.75 0 0 0 0-1.5h-3Z" clip-rule="evenodd"/></svg>
+          </button>
+          <div
+            v-if="showPresetMenu"
+            class="absolute right-0 top-full mt-1 z-30 bg-white dark:bg-gray-800 border dark:border-gray-600 rounded-xl shadow-xl w-52 py-1 text-sm"
+            @mouseleave="showPresetMenu = false"
+          >
+            <div v-if="presets.length === 0" class="px-3 py-2 text-xs text-gray-400 italic">No presets saved for this block type</div>
+            <button
+              v-for="preset in presets"
+              :key="preset._id"
+              class="w-full flex items-center justify-between px-3 py-2 hover:bg-indigo-50 dark:hover:bg-indigo-900/30 text-left gap-2 group/preset"
+              @click.stop="applyPreset(preset)"
+            >
+              <span class="truncate text-gray-800 dark:text-gray-200">{{ preset.name }}</span>
+              <button
+                @click="deletePreset(preset, $event)"
+                class="shrink-0 text-gray-300 hover:text-red-500 opacity-0 group-hover/preset:opacity-100 transition"
+                title="Delete preset"
+              >
+                <svg class="w-3.5 h-3.5" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M8.75 1A2.75 2.75 0 0 0 6 3.75v.443c-.795.077-1.584.176-2.365.298a.75.75 0 1 0 .23 1.482l.149-.022.841 10.518A2.75 2.75 0 0 0 7.596 19h4.807a2.75 2.75 0 0 0 2.742-2.53l.841-10.52.149.023a.75.75 0 0 0 .23-1.482A41.03 41.03 0 0 0 14 4.193V3.75A2.75 2.75 0 0 0 11.25 1h-2.5ZM10 4c.84 0 1.673.025 2.5.075V3.75c0-.69-.56-1.25-1.25-1.25h-2.5c-.69 0-1.25.56-1.25 1.25v.325C8.327 4.025 9.16 4 10 4ZM8.58 7.72a.75.75 0 0 0-1.5.06l.3 7.5a.75.75 0 1 0 1.5-.06l-.3-7.5Zm4.34.06a.75.75 0 1 0-1.5-.06l-.3 7.5a.75.75 0 1 0 1.5.06l.3-7.5Z" clip-rule="evenodd"/></svg>
+              </button>
+            </button>
+            <div class="border-t dark:border-gray-700 mt-1 pt-1 px-3 py-1.5 text-xs text-gray-400">Click to apply · hover to delete</div>
+          </div>
+        </div>
         <button @click.stop="emit('remove')" title="Remove block" class="p-1.5 rounded hover:bg-red-100 dark:hover:bg-red-900/30 text-gray-400 hover:text-red-500 transition">
           <svg class="w-4 h-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M8.75 1A2.75 2.75 0 0 0 6 3.75v.443c-.795.077-1.584.176-2.365.298a.75.75 0 1 0 .23 1.482l.149-.022.841 10.518A2.75 2.75 0 0 0 7.596 19h4.807a2.75 2.75 0 0 0 2.742-2.53l.841-10.52.149.023a.75.75 0 0 0 .23-1.482A41.03 41.03 0 0 0 14 4.193V3.75A2.75 2.75 0 0 0 11.25 1h-2.5ZM10 4c.84 0 1.673.025 2.5.075V3.75c0-.69-.56-1.25-1.25-1.25h-2.5c-.69 0-1.25.56-1.25 1.25v.325C8.327 4.025 9.16 4 10 4ZM8.58 7.72a.75.75 0 0 0-1.5.06l.3 7.5a.75.75 0 1 0 1.5-.06l-.3-7.5Zm4.34.06a.75.75 0 1 0-1.5-.06l-.3 7.5a.75.75 0 1 0 1.5.06l.3-7.5Z" clip-rule="evenodd"/></svg>
         </button>
       </div>
+    </div>
+
+    <!-- Save preset inline form -->
+    <div v-if="showSavePreset" class="flex items-center gap-2 px-4 py-2 border-t dark:border-gray-600 bg-amber-50 dark:bg-amber-900/20">
+      <svg class="w-3.5 h-3.5 text-amber-500 shrink-0" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"><path d="M10.75 2.75a.75.75 0 0 0-1.5 0v8.614L6.295 8.235a.75.75 0 1 0-1.09 1.03l4.25 4.5a.75.75 0 0 0 1.09 0l4.25-4.5a.75.75 0 0 0-1.09-1.03l-2.955 3.129V2.75Z"/><path d="M3.5 12.75a.75.75 0 0 0-1.5 0v2.5A2.75 2.75 0 0 0 4.75 18h10.5A2.75 2.75 0 0 0 18 15.25v-2.5a.75.75 0 0 0-1.5 0v2.5c0 .69-.56 1.25-1.25 1.25H4.75c-.69 0-1.25-.56-1.25-1.25v-2.5Z"/></svg>
+      <input
+        v-model="presetName"
+        placeholder="Preset name…"
+        class="flex-1 border rounded px-2 py-1 text-xs dark:bg-gray-800 dark:border-gray-600 dark:text-white"
+        @keydown.enter.prevent="savePreset"
+        @keydown.escape="showSavePreset = false"
+        autofocus
+      />
+      <button
+        @click="savePreset"
+        :disabled="savingPreset || !presetName.trim()"
+        class="px-2.5 py-1 bg-amber-500 text-white text-xs rounded hover:bg-amber-600 disabled:opacity-50 transition"
+      >{{ savingPreset ? '…' : 'Save' }}</button>
+      <button @click="showSavePreset = false" class="text-gray-400 hover:text-gray-600 text-xs">Cancel</button>
     </div>
 
     <!-- Fields -->

@@ -206,6 +206,18 @@ export interface FooterColumn {
   hideFrom: '' | 'sm' | 'md' | 'lg' | 'xl'
 }
 
+// ─── Block Presets ─────────────────────────────────────────────────────────────
+
+export interface BlockPreset {
+  _id?: string
+  name: string
+  blockType: string          // e.g. 'hero', 'rich-text' — presets are type-scoped
+  props: Record<string, unknown>
+  customCss?: string
+  createdAt?: string
+  createdBy?: string
+}
+
 // ─── Global Components ─────────────────────────────────────────────────────────
 
 export interface GlobalComponent {
